@@ -73,6 +73,9 @@ function Show-Info {
     Write-Host "  # Create minimal base image with GitHub CLI"
     Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludeGitHubCLI"
     Write-Host ""
+    Write-Host "  # Create minimal base image with multiple tools"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludePodman -IncludeGitHubCLI"
+    Write-Host ""
     Write-Host "  # Create minimal base image with all dev tools"
     Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludeDevTools"
     Write-Host ""
@@ -109,6 +112,9 @@ function Show-Info {
     Write-Host ""
     Write-Host "  # GitHub CLI付きの最小基本イメージを作成"
     Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludeGitHubCLI"
+    Write-Host ""
+    Write-Host "  # 複数のツール付きの最小基本イメージを作成"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludePodman -IncludeGitHubCLI"
     Write-Host ""
     Write-Host "  # 全開発ツール付きの最小基本イメージを作成"
     Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludeDevTools"
@@ -699,7 +705,12 @@ function New-MinimalBaseImage {
     
     # イメージ保存ディレクトリ作成
     $imageDir = Split-Path $BaseImagePath -Parent
+    if ([string]::IsNullOrEmpty($imageDir)) {
+        Write-ColorOutput Red "Error: Invalid BaseImagePath specified"
+        return
+    }
     if (-not (Test-Path $imageDir)) {
+        Write-Host "      Creating image directory: $imageDir" -ForegroundColor Gray
         New-Item -ItemType Directory -Force -Path $imageDir | Out-Null
     }
     

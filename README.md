@@ -20,11 +20,17 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ### 1. Create a Minimal Base Image
 
 ```powershell
-# Basic minimal image with Claude Code
+# Basic minimal image with Claude Code (default)
 .\Create-MinimalUbuntuWSL.ps1 -Action CreateBase
+
+# With specific tools (use - not +)
+.\Create-MinimalUbuntuWSL.ps1 -Action CreateBase -IncludePodman -IncludeGitHubCLI
 
 # With all development tools
 .\Create-MinimalUbuntuWSL.ps1 -Action CreateBase -IncludeDevTools
+
+# Without Claude Code (base only)
+.\Create-MinimalUbuntuWSL.ps1 -Action CreateBase -IncludeClaudeCode:$false
 ```
 
 ### 2. Create a New Instance
@@ -196,11 +202,17 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
 ### 1. 最小基本イメージの作成
 
 ```powershell
-# Claude Code付きの基本最小イメージ
+# Claude Code付きの基本最小イメージ（デフォルト）
 .\Create-MinimalUbuntuWSL.ps1 -Action CreateBase
+
+# 特定のツールを含める（+ではなく-を使用）
+.\Create-MinimalUbuntuWSL.ps1 -Action CreateBase -IncludePodman -IncludeGitHubCLI
 
 # 全開発ツール付き
 .\Create-MinimalUbuntuWSL.ps1 -Action CreateBase -IncludeDevTools
+
+# Claude Codeなし（ベースのみ）
+.\Create-MinimalUbuntuWSL.ps1 -Action CreateBase -IncludeClaudeCode:$false
 ```
 
 ### 2. 新しいインスタンスの作成
