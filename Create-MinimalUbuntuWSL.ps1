@@ -322,6 +322,7 @@ echo "[6/7] Optimizing system configuration..."
 cat > /etc/wsl.conf << 'EOF'
 [boot]
 systemd=true
+command=""
 
 [network]
 generateHosts=false
@@ -330,6 +331,10 @@ generateResolvConf=false
 [automount]
 enabled=true
 options="metadata,umask=22,fmask=11"
+
+[interop]
+enabled=true
+appendWindowsPath=true
 EOF
 
 # DNS設定
@@ -383,18 +388,35 @@ rm -f /etc/cron.monthly/*
 rm -f /etc/update-motd.d/*
 echo "Minimal Ubuntu WSL Environment" > /etc/motd
 
-# ログインメッセージを無効化
-touch /root/.hushlogin
-touch /home/wsluser/.hushlogin 2>/dev/null || true
-
 # 7. ユーザー設定
 echo "[7/7] Setting up user..."
 useradd -m -s /bin/bash -G sudo wsluser 2>/dev/null || true
 echo "wsluser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# ユーザーのhushloginファイルを作成（ユーザー作成後）
-touch /home/wsluser/.hushlogin 2>/dev/null || true
-chown wsluser:wsluser /home/wsluser/.hushlogin 2>/dev/null || true
+# ログインメッセージを完全に無効化
+# rootユーザー
+touch /root/.hushlogin
+chmod 644 /root/.hushlogin
+
+# wsluser
+touch /home/wsluser/.hushlogin
+chown wsluser:wsluser /home/wsluser/.hushlogin
+chmod 644 /home/wsluser/.hushlogin
+
+# デフォルトユーザー（WSLが作成する可能性のあるユーザー）
+mkdir -p /etc/skel
+touch /etc/skel/.hushlogin
+chmod 644 /etc/skel/.hushlogin
+
+# Ubuntu特有のメッセージも無効化
+if [ -f /etc/legal ]; then
+    echo "" > /etc/legal
+fi
+
+# WSL特有のメッセージファイルも処理
+if [ -d /etc/update-motd.d ]; then
+    chmod -x /etc/update-motd.d/* 2>/dev/null || true
+fi
 
 '@
 
