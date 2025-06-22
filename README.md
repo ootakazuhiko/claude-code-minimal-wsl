@@ -12,6 +12,11 @@ A PowerShell-based tool for creating ultra-lightweight Ubuntu WSL2 instances opt
 
 ## Quick Start
 
+**Note**: First time users may need to set PowerShell execution policy:
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+```
+
 ### 1. Create a Minimal Base Image
 
 ```powershell
@@ -102,6 +107,28 @@ cd my-project  # Automatically shows project info
 - Internet connection for package downloads
 - At least 2GB free disk space
 
+## PowerShell Execution Policy
+
+By default, PowerShell may block script execution. Before running the scripts, you need to set the execution policy:
+
+### Option 1: Temporary (Current Session Only)
+```powershell
+# Set execution policy for current PowerShell session only
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+```
+
+### Option 2: Current User
+```powershell
+# Set execution policy for current user
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### Option 3: Run Script Directly
+```powershell
+# Run script bypassing policy (one-time)
+powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Action Info
+```
+
 ## Troubleshooting
 
 ### Common Issues
@@ -160,6 +187,11 @@ Claude Code開発用に最適化された超軽量Ubuntu WSL2インスタンス�
 - **プロジェクトコンテキスト**: 自動プロジェクト識別とターミナルタイトル表示
 
 ## クイックスタート
+
+**注意**: 初回実行時はPowerShell実行ポリシーの設定が必要な場合があります：
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+```
 
 ### 1. 最小基本イメージの作成
 
@@ -250,6 +282,28 @@ cd my-project  # プロジェクト情報を自動表示
 - PowerShell 5.1以降
 - パッケージダウンロード用のインターネット接続
 - 最低2GBの空きディスク容量
+
+## PowerShell実行ポリシー
+
+デフォルトでは、PowerShellはスクリプトの実行をブロックする場合があります。スクリプトを実行する前に、実行ポリシーを設定する必要があります：
+
+### オプション1: 一時的（現在のセッションのみ）
+```powershell
+# 現在のPowerShellセッションのみ実行ポリシーを設定
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+```
+
+### オプション2: 現在のユーザー
+```powershell
+# 現在のユーザーの実行ポリシーを設定
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### オプション3: 直接スクリプトを実行
+```powershell
+# ポリシーをバイパスしてスクリプトを実行（一回限り）
+powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Action Info
+```
 
 ## トラブルシューティング
 
