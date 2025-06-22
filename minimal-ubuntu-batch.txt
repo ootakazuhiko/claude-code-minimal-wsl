@@ -1,0 +1,85 @@
+@echo off
+REM minimal-ubuntu-commands.bat - 最小Ubuntu WSL用の便利なコマンド集
+
+:MENU
+cls
+echo ========================================
+echo  Minimal Ubuntu WSL Manager
+echo ========================================
+echo.
+echo 1. Create minimal base image (no tools)
+echo 2. Create minimal base image (with Podman)
+echo 3. Create minimal base image (with GitHub CLI)
+echo 4. Create minimal base image (with ALL dev tools)
+echo 5. Create new instance
+echo 6. List images and instances
+echo 7. Quick setup (base + 2 instances)
+echo 0. Exit
+echo.
+set /p choice="Select option: "
+
+if "%choice%"=="1" goto CREATE_BASE
+if "%choice%"=="2" goto CREATE_BASE_PODMAN
+if "%choice%"=="3" goto CREATE_BASE_GH
+if "%choice%"=="4" goto CREATE_BASE_ALL
+if "%choice%"=="5" goto CREATE_INSTANCE
+if "%choice%"=="6" goto LIST
+if "%choice%"=="7" goto QUICK_SETUP
+if "%choice%"=="0" exit
+goto MENU
+
+:CREATE_BASE
+echo.
+echo Creating minimal Ubuntu base image...
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action CreateBase
+pause
+goto MENU
+
+:CREATE_BASE_PODMAN
+echo.
+echo Creating minimal Ubuntu base image with Podman...
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action CreateBase -IncludePodman
+pause
+goto MENU
+
+:CREATE_BASE_GH
+echo.
+echo Creating minimal Ubuntu base image with GitHub CLI...
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action CreateBase -IncludeGitHubCLI
+pause
+goto MENU
+
+:CREATE_BASE_ALL
+echo.
+echo Creating minimal Ubuntu base image with ALL development tools...
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action CreateBase -IncludeDevTools
+pause
+goto MENU
+
+:CREATE_INSTANCE
+echo.
+set /p name="Enter instance name: "
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action NewInstance -InstanceName "%name%"
+pause
+goto MENU
+
+:LIST
+echo.
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action ListImages
+pause
+goto MENU
+
+:QUICK_SETUP
+echo.
+echo Quick Setup: Creating base image with all dev tools and 2 instances...
+echo.
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action CreateBase -IncludeDevTools
+echo.
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action NewInstance -InstanceName "dev"
+powershell -ExecutionPolicy Bypass -File "%~dp0Create-MinimalUbuntuWSL.ps1" -Action NewInstance -InstanceName "test"
+echo.
+echo Quick setup complete!
+echo Instances created: Ubuntu-Minimal-dev, Ubuntu-Minimal-test
+echo Both instances include: Podman, GitHub CLI, Claude Code (placeholder)
+pause
+goto MENU

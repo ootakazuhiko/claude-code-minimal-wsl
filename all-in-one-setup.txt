@@ -1,0 +1,327 @@
+# Setup-Everything.ps1 - Minimal Claude Workspaces 完全セットアップ
+# このファイル1つですべてをセットアップします
+
+param(
+    [string]$ProjectRoot = "C:\Projects\minimal-claude-workspaces",
+    [switch]$SkipGitInit = $false
+)
+
+$ErrorActionPreference = "Stop"
+
+Write-Host @"
+============================================
+ Minimal Claude Workspaces - Complete Setup
+============================================
+
+This script will:
+1. Create all directories
+2. Generate all script files
+3. Create documentation
+4. Initialize Git repository
+
+Project location: $ProjectRoot
+"@ -ForegroundColor Cyan
+
+# プロジェクトディレクトリ作成
+if (-not (Test-Path $ProjectRoot)) {
+    New-Item -ItemType Directory -Path $ProjectRoot -Force | Out-Null
+}
+Set-Location $ProjectRoot
+
+# ディレクトリ構造作成
+Write-Host "`nCreating directory structure..." -ForegroundColor Green
+@(
+    "scripts\powershell"
+    "scripts\bash"
+    "docs"
+    "examples"
+    "tools"
+    ".github\workflows"
+) | ForEach-Object {
+    New-Item -ItemType Directory -Force -Path $_ | Out-Null
+}
+
+# ファイル作成関数
+function Save-File {
+    param($Path, $Content)
+    $Content = $Content.Trim()
+    if ($Path -match "\.sh$") {
+        $Content = $Content -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText("$ProjectRoot\$Path", $Content, [System.Text.Encoding]::UTF8)
+    } else {
+        $Content | Out-File -FilePath "$ProjectRoot\$Path" -Encoding UTF8
+    }
+    Write-Host "  Created: $Path" -ForegroundColor Gray
+}
+
+Write-Host "`nCreating core files..." -ForegroundColor Green
+
+# README.md
+Save-File "README.md" @'
+# Minimal Claude Workspaces
+
+![WSL2](https://img.shields.io/badge/WSL2-Ubuntu%2022.04-orange)
+![Podman](https://img.shields.io/badge/Podman-Rootless-blue)
+![Size](https://img.shields.io/badge/Size-500MB-green)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
+
+**Claude Code向けに最適化された複数の独立WSLインスタンスを管理し、各インスタンスでPodmanによるコンテナ開発環境を提供するツール**
+
+## Quick Start
+
+```powershell
+# Setup
+.\tools\quick-setup.ps1
+
+# Create instance
+.\scripts\powershell\Create-Instance.ps1 -Name dev1
+
+# Connect
+wsl -d Ubuntu-ClaudeCode-dev1
+```
+'@
+
+# LICENSE
+Save-File "LICENSE" @'
+MIT License
+
+Copyright (c) 2024 [Your Name]
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+'@
+
+# .gitignore
+Save-File ".gitignore" @'
+# WSL
+*.tar
+*.vhdx
+
+# Config
+instances.json
+*.token
+
+# Backup
+/Backups/
+*.bak
+
+# Temp
+*.tmp
+*.log
+
+# IDE
+.vscode/
+.idea/
+'@
+
+Write-Host "`nCreating PowerShell scripts..." -ForegroundColor Green
+
+# Create-Instance.ps1 (最重要スクリプト)
+Save-File "scripts\powershell\Create-Instance.ps1" @'
+# Create-Instance.ps1 - WSLインスタンス作成
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$Name
+)
+
+Write-Host "Creating WSL instance: $Name" -ForegroundColor Green
+
+# Ubuntu 22.04をインストール
+$distroName = "Ubuntu-ClaudeCode-$Name"
+$instancePath = "C:\WSL\Instances\$Name"
+
+# ディレクトリ作成
+New-Item -ItemType Directory -Force -Path $instancePath | Out-Null
+
+# 既存チェック
+if (wsl --list --quiet | Select-String $distroName) {
+    Write-Host "Instance already exists!" -ForegroundColor Yellow
+    return
+}
+
+# インストール
+Write-Host "Installing Ubuntu 22.04..."
+wsl --install -d Ubuntu-22.04 --no-launch
+Start-Sleep -Seconds 5
+
+# エクスポートとインポート
+$tempFile = "$env:TEMP\ubuntu-temp.tar"
+wsl --export Ubuntu-22.04 $tempFile
+wsl --unregister Ubuntu-22.04
+wsl --import $distroName $instancePath $tempFile
+Remove-Item $tempFile
+
+Write-Host "Instance created: $distroName" -ForegroundColor Green
+Write-Host "Connect with: wsl -d $distroName" -ForegroundColor Yellow
+'@
+
+# Setup-Minimal.ps1
+Save-File "scripts\powershell\Setup-Minimal.ps1" @'
+# Setup-Minimal.ps1 - 最小構成セットアップ
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$InstanceName
+)
+
+$distroName = "Ubuntu-ClaudeCode-$InstanceName"
+
+Write-Host "Setting up minimal configuration for $InstanceName" -ForegroundColor Green
+
+# 最小構成スクリプト
+$setupScript = @"
+#!/bin/bash
+set -e
+apt-get update
+apt-get install -y --no-install-recommends curl wget git sudo vim-tiny
+apt-get remove -y --purge snapd cloud-init 2>/dev/null || true
+apt-get autoremove -y --purge
+apt-get clean
+useradd -m -s /bin/bash claude 2>/dev/null || true
+echo 'claude ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+echo 'Setup complete!'
+"@
+
+# 実行
+$setupScript | wsl -d $distroName -u root bash
+
+Write-Host "Minimal setup complete!" -ForegroundColor Green
+'@
+
+# Install-Podman.ps1
+Save-File "scripts\powershell\Install-Podman.ps1" @'
+# Install-Podman.ps1 - Podmanインストール
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$InstanceName
+)
+
+$distroName = "Ubuntu-ClaudeCode-$InstanceName"
+
+Write-Host "Installing Podman in $InstanceName" -ForegroundColor Green
+
+$installScript = @"
+#!/bin/bash
+set -e
+apt-get update
+apt-get install -y podman
+loginctl enable-linger claude || true
+echo 'Podman installed!'
+podman --version
+"@
+
+$installScript | wsl -d $distroName -u root bash
+
+Write-Host "Podman installation complete!" -ForegroundColor Green
+'@
+
+Write-Host "`nCreating bash scripts..." -ForegroundColor Green
+
+# minimal-setup.sh
+Save-File "scripts\bash\minimal-setup.sh" @'
+#!/bin/bash
+set -euo pipefail
+echo "Running minimal setup..."
+apt-get update && apt-get upgrade -y
+apt-get install -y --no-install-recommends \
+    curl wget git sudo vim-tiny ca-certificates
+apt-get remove -y --purge snapd cloud-init 2>/dev/null || true
+apt-get autoremove -y --purge && apt-get clean
+echo "Minimal setup complete!"
+'@
+
+# quick-podman.sh
+Save-File "scripts\bash\quick-podman.sh" @'
+#!/bin/bash
+set -euo pipefail
+echo "Installing Podman..."
+apt-get update && apt-get install -y podman
+podman --version
+echo "Creating test container..."
+podman run --rm hello-world
+echo "Podman ready!"
+'@
+
+Write-Host "`nCreating quick setup tool..." -ForegroundColor Green
+
+# tools/quick-setup.ps1
+Save-File "tools\quick-setup.ps1" @'
+# Quick Setup - 2インスタンスを簡単作成
+Write-Host "Minimal Claude Workspaces - Quick Setup" -ForegroundColor Cyan
+
+# インスタンス作成
+@("dev1", "dev2") | ForEach-Object {
+    Write-Host "`nCreating instance: $_" -ForegroundColor Green
+    & "$PSScriptRoot\..\scripts\powershell\Create-Instance.ps1" -Name $_
+    & "$PSScriptRoot\..\scripts\powershell\Setup-Minimal.ps1" -InstanceName $_
+}
+
+Write-Host "`nSetup complete!" -ForegroundColor Green
+Write-Host "Connect to instances:" -ForegroundColor Yellow
+Write-Host "  wsl -d Ubuntu-ClaudeCode-dev1" -ForegroundColor White
+Write-Host "  wsl -d Ubuntu-ClaudeCode-dev2" -ForegroundColor White
+'@
+
+# Git初期化
+if (-not $SkipGitInit) {
+    Write-Host "`nInitializing Git repository..." -ForegroundColor Green
+    git init
+    git add .
+    git commit -m "Initial commit: Minimal Claude Workspaces"
+}
+
+Write-Host "`n============================================" -ForegroundColor Green
+Write-Host " Setup Complete!" -ForegroundColor Green
+Write-Host "============================================" -ForegroundColor Green
+
+Write-Host @"
+
+Project created at: $ProjectRoot
+
+Quick start:
+1. cd $ProjectRoot
+2. .\tools\quick-setup.ps1
+3. wsl -d Ubuntu-ClaudeCode-dev1
+
+To install Podman:
+.\scripts\powershell\Install-Podman.ps1 -InstanceName dev1
+
+"@ -ForegroundColor Yellow
+
+Write-Host "All files have been created!" -ForegroundColor Green
+'@
+
+# 実行
+Save-Script -Path "Setup-Everything.ps1" -Content $setupEverything
+
+Write-Host @"
+
+==========================================
+ SOLUTION: One-Command Setup
+==========================================
+
+1. Save this output as 'Setup-Everything.ps1'
+2. Run: .\Setup-Everything.ps1
+3. Done! All files will be created.
+
+This creates a working project with:
+- Simple instance creation scripts
+- Minimal setup automation  
+- Podman installation scripts
+- Quick setup tools
+
+"@ -ForegroundColor Cyan

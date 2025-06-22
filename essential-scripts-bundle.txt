@@ -1,0 +1,122 @@
+# Create-EssentialScripts.ps1 - 最も重要な3つのスクリプトを作成
+
+$ErrorActionPreference = "Stop"
+
+# スクリプトディレクトリ作成
+New-Item -ItemType Directory -Force -Path "scripts\powershell" | Out-Null
+New-Item -ItemType Directory -Force -Path "scripts\bash" | Out-Null
+
+Write-Host "Creating essential scripts..." -ForegroundColor Green
+
+# 1. 簡易版統合セットアップ (これ1つで基本的な環境構築が可能)
+$quickSetup = @'
+# Quick-Setup.ps1 - 最小限の統合セットアップ
+param(
+    [int]$InstanceCount = 2
+)
+
+Write-Host "Minimal Claude Workspaces - Quick Setup" -ForegroundColor Cyan
+
+# WSLチェック
+$wslStatus = wsl --list --verbose 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Installing WSL..." -ForegroundColor Yellow
+    wsl --install
+    Write-Host "Please restart your computer and run this script again." -ForegroundColor Red
+    exit
+}
+
+# Ubuntuインスタンス作成
+for ($i = 1; $i -le $InstanceCount; $i++) {
+    $name = "claude-$i"
+    Write-Host "Creating instance: $name" -ForegroundColor Green
+    
+    # Ubuntu 22.04をベースに作成
+    if (-not (wsl --list --quiet | Select-String "Ubuntu-ClaudeCode-$name")) {
+        # 一時的にデフォルトUbuntuをインストール
+        wsl --install -d Ubuntu-22.04 --no-launch
+        Start-Sleep -Seconds 5
+        
+        # リネーム
+        $tempPath = "$env:TEMP\ubuntu-temp-$name.tar"
+        wsl --export Ubuntu-22.04 $tempPath
+        wsl --unregister Ubuntu-22.04
+        wsl --import "Ubuntu-ClaudeCode-$name" "C:\WSL\Instances\$name" $tempPath
+        Remove-Item $tempPath
+        
+        Write-Host "Instance $name created" -ForegroundColor Green
+    }
+}
+
+Write-Host "`nSetup complete!" -ForegroundColor Green
+Write-Host "Connect to instance: wsl -d Ubuntu-ClaudeCode-claude-1" -ForegroundColor Yellow
+'@
+
+$quickSetup | Out-File -FilePath "Quick-Setup.ps1" -Encoding UTF8
+Write-Host "Created: Quick-Setup.ps1" -ForegroundColor Green
+
+# 2. 最小構成セットアップスクリプト
+$minimalSetup = @'
+#!/bin/bash
+# minimal-setup.sh - WSL最小構成セットアップ
+
+set -euo pipefail
+
+echo "Starting minimal setup..."
+
+# 更新と最小パッケージ
+apt-get update
+apt-get install -y --no-install-recommends \
+    curl wget git sudo vim-tiny ca-certificates
+
+# 不要パッケージ削除
+apt-get remove -y --purge snapd cloud-init 2>/dev/null || true
+apt-get autoremove -y --purge
+apt-get clean
+
+# ユーザー作成
+useradd -m -s /bin/bash claude 2>/dev/null || true
+echo "claude ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+echo "Minimal setup complete"
+'@
+
+$minimalSetup -replace "`r`n", "`n" | Out-File -FilePath "scripts\bash\minimal-setup.sh" -Encoding UTF8 -NoNewline
+Write-Host "Created: scripts\bash\minimal-setup.sh" -ForegroundColor Green
+
+# 3. Podman簡易インストール
+$podmanInstall = @'
+#!/bin/bash
+# install-podman.sh - Podman簡易インストール
+
+set -euo pipefail
+
+echo "Installing Podman..."
+
+# Podmanインストール
+apt-get update
+apt-get install -y podman
+
+# Rootless設定
+loginctl enable-linger $USER || true
+
+echo "Podman installation complete"
+podman --version
+'@
+
+$podmanInstall -replace "`r`n", "`n" | Out-File -FilePath "scripts\bash\install-podman.sh" -Encoding UTF8 -NoNewline
+Write-Host "Created: scripts\bash\install-podman.sh" -ForegroundColor Green
+
+Write-Host "`nEssential scripts created!" -ForegroundColor Green
+Write-Host "`nQuick start:" -ForegroundColor Yellow
+Write-Host "1. Run: .\Quick-Setup.ps1" -ForegroundColor White
+Write-Host "2. Connect: wsl -d Ubuntu-ClaudeCode-claude-1" -ForegroundColor White
+Write-Host "3. Run: bash /mnt/c/path/to/scripts/bash/minimal-setup.sh" -ForegroundColor White
+Write-Host "4. Run: bash /mnt/c/path/to/scripts/bash/install-podman.sh" -ForegroundColor White
+'@
+
+# スクリプトを保存
+$essentialBundle | Out-File -FilePath "Create-EssentialScripts.ps1" -Encoding UTF8
+
+Write-Host "`nCreated: Create-EssentialScripts.ps1" -ForegroundColor Green
+Write-Host "This creates only the most essential scripts to get started quickly." -ForegroundColor Yellow

@@ -1,0 +1,71 @@
+name: Test Scripts
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  powershell-syntax:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Test PowerShell Syntax
+      shell: powershell
+      run: |
+        $scripts = Get-ChildItem -Path . -Filter "*.ps1" -Recurse
+        $errors = @()
+        
+        foreach ($script in $scripts) {
+          Write-Host "Testing syntax: $($script.Name)"
+          try {
+            $null = [System.Management.Automation.PSParser]::Tokenize((Get-Content $script.FullName -Raw), [ref]$null)
+            Write-Host "✓ $($script.Name) - Syntax OK" -ForegroundColor Green
+          }
+          catch {
+            $errors += "$($script.Name): $_"
+            Write-Host "✗ $($script.Name) - Syntax Error" -ForegroundColor Red
+          }
+        }
+        
+        if ($errors.Count -gt 0) {
+          Write-Host "Syntax errors found:" -ForegroundColor Red
+          $errors | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+          exit 1
+        }
+        
+        Write-Host "All PowerShell scripts passed syntax validation" -ForegroundColor Green
+
+  documentation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check documentation files
+      run: |
+        echo "Checking required documentation files..."
+        
+        required_files=("README.md" "CLAUDE.md" "LICENSE" "CONTRIBUTING.md")
+        missing_files=()
+        
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✓ $file exists"
+          else
+            echo "✗ $file missing"
+            missing_files+=("$file")
+          fi
+        done
+        
+        if [ ${#missing_files[@]} -gt 0 ]; then
+          echo "Missing required files: ${missing_files[*]}"
+          exit 1
+        fi
+        
+        echo "All required documentation files are present"

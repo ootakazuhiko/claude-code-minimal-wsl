@@ -1,0 +1,43 @@
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# PowerShell
+*.ps1xml
+
+# WSL Images and Instances
+*.tar
+WSL-MinimalImages/
+WSL-Instances/
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Backup files
+*.bak
+*.old
+
+# User-specific files
+.DS_Store
+
+# Development artifacts
+temp/
+tmp/
+build/
+dist/
+
+# Sensitive data
+secrets/
+.env
+config.local.*

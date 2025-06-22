@@ -1,0 +1,1021 @@
+# Create-MinimalUbuntuWSL.ps1
+# 最小構成のUbuntu WSLイメージを作成・管理するスタンドアロンスクリプト
+
+param(
+    [Parameter(Mandatory=$false)]
+    [ValidateSet("CreateBase", "NewInstance", "ListImages", "Info")]
+    [string]$Action = "Info",
+    
+    [Parameter(Mandatory=$false)]
+    [string]$InstanceName = "",
+    
+    [Parameter(Mandatory=$false)]
+    [string]$BaseImagePath = "$env:USERPROFILE\WSL-MinimalImages\ubuntu-22.04-minimal.tar",
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$KeepTempInstance = $false,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludePodman = $false,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludeGitHubCLI = $false,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludeClaudeCode = $false,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$IncludeDevTools = $false
+)
+
+$ErrorActionPreference = "Stop"
+
+# カラー出力
+function Write-ColorOutput($Color, $Text) {
+    Write-Host $Text -ForegroundColor $Color
+}
+
+# ヘッダー表示
+function Show-Header {
+    Write-ColorOutput Cyan @"
+
+======================================
+ Minimal Ubuntu WSL Image Creator
+======================================
+
+Create ultra-lightweight Ubuntu images for WSL2
+- Standard Ubuntu: ~1.5GB → Minimal: ~500MB
+- Removed: snap, cloud-init, docs, unnecessary services
+- Optimized for containers and development
+
+"@
+}
+
+# 情報表示
+function Show-Info {
+    Show-Header
+    
+    Write-ColorOutput Yellow "Available Actions:"
+    Write-Host ""
+    Write-Host "  CreateBase    - Create a new minimal Ubuntu base image"
+    Write-Host "  NewInstance   - Create a new WSL instance from minimal image"
+    Write-Host "  ListImages    - List available minimal images"
+    Write-Host "  Info          - Show this information"
+    Write-Host ""
+    Write-ColorOutput Yellow "Examples:"
+    Write-Host ""
+    Write-Host "  # Create minimal base image"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase"
+    Write-Host ""
+    Write-Host "  # Create minimal base image with Podman"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludePodman"
+    Write-Host ""
+    Write-Host "  # Create minimal base image with GitHub CLI"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludeGitHubCLI"
+    Write-Host ""
+    Write-Host "  # Create minimal base image with all dev tools"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -IncludeDevTools"
+    Write-Host ""
+    Write-Host "  # Create new instance from minimal image"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action NewInstance -InstanceName myproject"
+    Write-Host ""
+    Write-Host "  # Use custom image path"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase -BaseImagePath C:\MyImages\minimal.tar"
+    Write-Host ""
+    Write-ColorOutput Yellow "Options:"
+    Write-Host ""
+    Write-Host "  -IncludePodman     Include Podman container runtime"
+    Write-Host "  -IncludeGitHubCLI  Include GitHub CLI (gh)"
+    Write-Host "  -IncludeClaudeCode Include Claude Code"
+    Write-Host "  -IncludeDevTools   Include all development tools (Podman + gh + Claude Code)"
+    Write-Host ""
+}
+
+# 最小化スクリプト作成
+function Get-MinimalSetupScript {
+    param(
+        [bool]$WithPodman,
+        [bool]$WithGitHubCLI,
+        [bool]$WithClaudeCode
+    )
+    
+    $script = @'
+#!/bin/bash
+# Minimal Ubuntu Setup Script
+set -euo pipefail
+
+echo "================================================="
+echo " Starting Ubuntu Minimization"
+echo "================================================="
+echo ""
+
+# 環境変数設定
+export DEBIAN_FRONTEND=noninteractive
+export DEBCONF_NONINTERACTIVE_SEEN=true
+
+# 1. 基本アップデート
+echo "[1/7] System update..."
+apt-get update >/dev/null 2>&1
+apt-get upgrade -y >/dev/null 2>&1
+
+# 2. 必要最小限のパッケージをインストール
+echo "[2/7] Installing essential packages..."
+apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    git \
+    sudo \
+    locales \
+    tzdata \
+    systemd \
+    systemd-sysv \
+    dbus \
+    vim-tiny >/dev/null 2>&1
+
+# ロケール設定
+locale-gen en_US.UTF-8
+update-locale LANG=en_US.UTF-8
+
+# 3. 不要なパッケージを削除
+echo "[3/7] Removing unnecessary packages..."
+REMOVE_PACKAGES=(
+    # Snap関連
+    snapd
+    
+    # Cloud関連
+    cloud-init
+    cloud-guest-utils
+    cloud-initramfs-copymods
+    cloud-initramfs-dyn-netconf
+    
+    # 自動更新
+    unattended-upgrades
+    update-manager-core
+    ubuntu-release-upgrader-core
+    update-notifier-common
+    
+    # 不要なシステムサービス
+    accountsservice
+    bolt
+    modemmanager
+    network-manager
+    networkd-dispatcher
+    packagekit
+    policykit-1
+    udisks2
+    upower
+    whoopsie
+    apport
+    popularity-contest
+    
+    # Plymouth
+    plymouth
+    plymouth-theme-ubuntu-text
+    
+    # その他の不要なもの
+    landscape-common
+    ubuntu-advantage-tools
+    xdg-user-dirs
+    friendly-recovery
+    bcache-tools
+    btrfs-progs
+    xfsprogs
+    mdadm
+    open-iscsi
+    lxd-agent-loader
+    
+    # ドキュメント関連
+    man-db
+    manpages
+    manpages-dev
+    info
+    install-info
+    
+    # 開発ツール（最小構成では不要）
+    build-essential
+    python3-pip
+    
+    # その他
+    nano
+    ed
+    lshw
+    hdparm
+    eject
+    ftp
+    telnet
+    ntfs-3g
+    mlocate
+)
+
+for package in "${REMOVE_PACKAGES[@]}"; do
+    apt-get remove -y --purge $package 2>/dev/null || true
+done
+
+# 重要なパッケージが誤って削除されていないか確認・再インストール
+echo "Ensuring essential packages are installed..."
+ESSENTIAL_PACKAGES=(
+    dpkg
+    apt
+    base-files
+    base-passwd
+    bash
+    coreutils
+    grep
+    gzip
+    hostname
+    init-system-helpers
+    libc6
+    login
+    mount
+    passwd
+    perl-base
+    sed
+    sysvinit-utils
+    tar
+    util-linux
+)
+
+for package in "${ESSENTIAL_PACKAGES[@]}"; do
+    if ! dpkg -l "$package" >/dev/null 2>&1; then
+        echo "Reinstalling essential package: $package"
+        apt-get install -y --no-install-recommends "$package" || {
+            echo "Warning: Failed to install $package"
+        }
+    fi
+done
+
+# 4. 依存関係のクリーンアップ
+echo "[4/7] Cleaning up dependencies..."
+apt-get autoremove -y --purge >/dev/null 2>&1
+
+# 5. ドキュメントとキャッシュの削除
+echo "[5/7] Removing documentation and caches..."
+
+# ドキュメント削除
+rm -rf /usr/share/doc/*
+rm -rf /usr/share/man/*
+rm -rf /usr/share/info/*
+rm -rf /usr/share/lintian/*
+
+# 不要なロケール削除
+find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name 'en*' -exec rm -rf {} +
+
+# キャッシュクリア
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+rm -rf /var/cache/apt/archives/*
+rm -rf /var/cache/debconf/*
+rm -rf /tmp/*
+rm -rf /var/tmp/*
+
+# ログクリア
+find /var/log -type f -exec truncate -s 0 {} \;
+
+# 6. システム設定の最適化
+echo "[6/7] Optimizing system configuration..."
+
+# WSL設定
+cat > /etc/wsl.conf << 'EOF'
+[boot]
+systemd=true
+
+[network]
+generateHosts=false
+generateResolvConf=false
+
+[automount]
+enabled=true
+options="metadata,umask=22,fmask=11"
+EOF
+
+# DNS設定
+rm -f /etc/resolv.conf
+cat > /etc/resolv.conf << 'EOF'
+nameserver 1.1.1.1
+nameserver 1.0.0.1
+EOF
+
+# 不要なサービスの無効化
+DISABLE_SERVICES=(
+    systemd-networkd
+    systemd-resolved
+    accounts-daemon
+    cron
+    rsyslog
+    ssh
+    multipathd
+    networkd-dispatcher
+    unattended-upgrades
+)
+
+for service in "${DISABLE_SERVICES[@]}"; do
+    systemctl disable $service 2>/dev/null || true
+    systemctl mask $service 2>/dev/null || true
+done
+
+# journald設定（ログサイズ制限）
+mkdir -p /etc/systemd/journald.conf.d/
+cat > /etc/systemd/journald.conf.d/00-wsl.conf << 'EOF'
+[Journal]
+SystemMaxUse=50M
+RuntimeMaxUse=10M
+ForwardToSyslog=no
+EOF
+
+# apt設定（推奨パッケージ無効化）
+cat > /etc/apt/apt.conf.d/99-no-recommends << 'EOF'
+APT::Install-Recommends "false";
+APT::Install-Suggests "false";
+APT::AutoRemove::RecommendsImportant "false";
+APT::AutoRemove::SuggestsImportant "false";
+EOF
+
+# 不要なcronジョブ削除
+rm -f /etc/cron.daily/*
+rm -f /etc/cron.weekly/*
+rm -f /etc/cron.monthly/*
+
+# motd簡素化
+rm -f /etc/update-motd.d/*
+echo "Minimal Ubuntu WSL Environment" > /etc/motd
+
+# 7. ユーザー設定
+echo "[7/7] Setting up user..."
+useradd -m -s /bin/bash -G sudo wsluser 2>/dev/null || true
+echo "wsluser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+'@
+
+    # オプショナルツールのカウンター
+    $stepNum = 8
+    
+    # GitHub CLI インストール
+    if ($WithGitHubCLI) {
+        $script += @"
+
+# $stepNum. GitHub CLI インストール
+echo "[$stepNum/X] Installing GitHub CLI..."
+
+# GitHub CLI GPGキー追加
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null 2>&1
+
+# リポジトリ追加
+echo "deb [arch=\$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+
+# インストール
+apt-get update >/dev/null 2>&1
+apt-get install -y --no-install-recommends gh >/dev/null 2>&1
+
+# クリーンアップ
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+
+"@
+        $stepNum++
+    }
+    
+    # Claude Code インストール
+    if ($WithClaudeCode) {
+        # 修正: here-stringのエスケープ問題を解決
+        $bashrcContent = @'
+# Claude Code settings
+export CLAUDE_CODE_HOME=/opt/claude-code
+export PATH=$PATH:$CLAUDE_CODE_HOME:$HOME/.local/bin
+
+# Claude Code completion (if available)
+if command -v claude-code &> /dev/null; then
+    eval "$(claude-code --completion-script bash 2>/dev/null || true)"
+fi
+
+# Claude Code aliases
+alias claude="claude-code"
+alias cc="claude-code"
+'@
+
+        $configContent = @'
+# Claude Code Configuration
+# See: https://docs.anthropic.com/ja/docs/claude-code/getting-started
+
+# API設定（キーは後で設定）
+api:
+  # key: "your-api-key-here"
+  # endpoint: "https://api.anthropic.com"
+
+# デフォルト設定
+defaults:
+  model: "claude-3-opus-20240229"
+  max_tokens: 4096
+  temperature: 0.7
+
+# エディタ統合
+editor:
+  command: "vim"
+  
+# プロジェクト設定
+project:
+  ignore_patterns:
+    - "*.pyc"
+    - "__pycache__"
+    - ".git"
+    - "node_modules"
+'@
+
+        $setupHelperContent = @'
+#!/bin/bash
+# Claude Code セットアップヘルパー
+
+echo "======================================"
+echo " Claude Code Setup Helper"
+echo "======================================"
+echo ""
+echo "Claude Code has been installed."
+echo ""
+echo "To complete setup:"
+echo ""
+echo "1. Get your API key from: https://console.anthropic.com/"
+echo ""
+echo "2. Set your API key using one of these methods:"
+echo "   a) Environment variable:"
+echo "      export ANTHROPIC_API_KEY='your-api-key'"
+echo "      echo 'export ANTHROPIC_API_KEY=\"your-api-key\"' >> ~/.bashrc"
+echo ""
+echo "   b) Claude Code config:"
+echo "      claude-code auth login"
+echo ""
+echo "   c) Config file:"
+echo "      Edit ~/.config/claude-code/config.yaml"
+echo ""
+echo "3. Verify installation:"
+echo "   claude-code --version"
+echo "   claude-code --help"
+echo ""
+echo "4. Quick test:"
+echo "   echo 'Hello, Claude!' | claude-code"
+echo ""
+echo "For more information:"
+echo "https://docs.anthropic.com/ja/docs/claude-code/getting-started"
+echo ""
+'@
+
+        $script += @"
+
+# $stepNum. Claude Code インストール
+echo "[$stepNum/X] Installing Claude Code..."
+
+# Claude Code の前提条件
+apt-get install -y --no-install-recommends python3 python3-venv python3-pip >/dev/null 2>&1
+
+# Claude Code インストール用ディレクトリ
+mkdir -p /opt/claude-code
+chown -R wsluser:wsluser /opt/claude-code
+
+# Claude Code インストール
+echo "Installing Claude Code CLI..."
+
+# pipを使用してインストール（一般的なPythonパッケージの場合）
+su - wsluser -c "pip3 install --user claude-code" || {
+    echo "Note: Please refer to https://docs.anthropic.com/ja/docs/claude-code/getting-started"
+    echo "for the official installation instructions."
+}
+
+# 環境変数とパスの設定（修正版）
+cat >> /home/wsluser/.bashrc << 'BASHRC_EOF'
+$bashrcContent
+BASHRC_EOF
+
+# 設定ファイルディレクトリの作成
+mkdir -p /home/wsluser/.config/claude-code
+chown -R wsluser:wsluser /home/wsluser/.config/claude-code
+
+# 初期設定ファイル
+cat > /home/wsluser/.config/claude-code/config.yaml << 'CONFIG_EOF'
+$configContent
+CONFIG_EOF
+
+chown wsluser:wsluser /home/wsluser/.config/claude-code/config.yaml
+
+# APIキー設定の案内
+cat > /opt/claude-code/setup-claude-code.sh << 'SETUP_EOF'
+$setupHelperContent
+SETUP_EOF
+
+chmod +x /opt/claude-code/setup-claude-code.sh
+chown wsluser:wsluser /opt/claude-code/setup-claude-code.sh
+
+# クリーンアップ
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+
+echo "Claude Code installation completed."
+echo "Run '/opt/claude-code/setup-claude-code.sh' for setup instructions."
+
+"@
+        $stepNum++
+    }
+
+    # Podman インストール
+    if ($WithPodman) {
+        $script += @"
+
+# $stepNum. Podman インストール
+echo "[$stepNum/X] Installing Podman..."
+
+# Podman前提パッケージ
+apt-get install -y --no-install-recommends \
+    uidmap \
+    slirp4netns \
+    fuse-overlayfs \
+    libslirp0 >/dev/null 2>&1
+
+# Podmanリポジトリ追加
+. /etc/os-release
+echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_\${VERSION_ID}/ /" > /etc/apt/sources.list.d/podman.list
+curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_\${VERSION_ID}/Release.key" | apt-key add - >/dev/null 2>&1
+
+# Podmanインストール
+apt-get update >/dev/null 2>&1
+apt-get install -y --no-install-recommends podman >/dev/null 2>&1
+
+# Rootless設定
+usermod --add-subuids 100000-165535 --add-subgids 100000-165535 wsluser 2>/dev/null || true
+
+# 再度クリーンアップ
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+
+"@
+        $stepNum++
+    }
+
+    $script += @'
+
+# 最終クリーンアップ
+echo ""
+echo "Cleaning up final bits..."
+apt-get clean
+rm -rf /tmp/*
+
+# サイズ確認（エラーハンドリング付き）
+echo ""
+echo "================================================="
+echo " Minimization Complete!"
+echo "================================================="
+echo ""
+echo "Disk usage:"
+if command -v df >/dev/null 2>&1; then
+    df -h / 2>/dev/null | grep -E "^/|Filesystem" || echo "Disk usage information unavailable"
+else
+    echo "df command not available"
+fi
+echo ""
+
+# dpkgの存在確認と最終的なパッケージ数カウント
+if command -v dpkg >/dev/null 2>&1; then
+    PACKAGE_COUNT=$(dpkg -l 2>/dev/null | grep '^ii' | wc -l 2>/dev/null || echo "unknown")
+    echo "Package count: $PACKAGE_COUNT packages"
+    
+    # 重要なパッケージの存在確認
+    echo "Essential packages status:"
+    for pkg in dpkg apt bash coreutils; do
+        if dpkg -l "$pkg" >/dev/null 2>&1; then
+            echo "  ✓ $pkg"
+        else
+            echo "  ✗ $pkg (missing)"
+        fi
+    done
+else
+    echo "Error: dpkg command not available - attempting to reinstall..."
+    apt-get update >/dev/null 2>&1
+    apt-get install -y --no-install-recommends dpkg >/dev/null 2>&1
+    
+    if command -v dpkg >/dev/null 2>&1; then
+        PACKAGE_COUNT=$(dpkg -l 2>/dev/null | grep '^ii' | wc -l 2>/dev/null || echo "unknown")
+        echo "Package count: $PACKAGE_COUNT packages (after dpkg reinstall)"
+    else
+        echo "Critical error: Could not restore dpkg functionality"
+    fi
+fi
+echo ""
+echo "Minimization script completed successfully!"
+'@
+
+    return $script
+}
+
+# ベースイメージ作成
+function New-MinimalBaseImage {
+    Show-Header
+    Write-ColorOutput Green "Creating Minimal Ubuntu Base Image"
+    Write-Host ""
+    
+    # イメージ保存ディレクトリ作成
+    $imageDir = Split-Path $BaseImagePath -Parent
+    if (-not (Test-Path $imageDir)) {
+        New-Item -ItemType Directory -Force -Path $imageDir | Out-Null
+    }
+    
+    # 既存イメージチェック
+    if (Test-Path $BaseImagePath) {
+        Write-ColorOutput Yellow "Base image already exists: $BaseImagePath"
+        $overwrite = Read-Host "Overwrite? (y/N)"
+        if ($overwrite -ne 'y') {
+            Write-Host "Cancelled."
+            return
+        }
+    }
+    
+    # 一時インスタンス名と変数初期化
+    $tempDistro = "Ubuntu-Minimal-Temp-$(Get-Random -Maximum 9999)"
+    $tempExport = "$env:TEMP\ubuntu-temp-base-$(Get-Random).tar"
+    $tempInstanceDir = "$env:TEMP\wsl-minimal-temp-$(Get-Random)"
+    $baseDistro = "Ubuntu-22.04"  # デフォルトのベースディストリビューション
+    
+    try {
+        # WSL状態確認
+        Write-Host "[1/5] Checking WSL environment..." -ForegroundColor White
+        
+        # WSL有効性確認
+        try {
+            wsl --status | Out-Null
+        } catch {
+            Write-ColorOutput Red "Error: WSL is not available or not properly configured"
+            Write-Host "Please ensure WSL2 is installed and enabled."
+            return
+        }
+        
+        # Ubuntu-22.04の確認とインストール
+        Write-Host "      Checking for Ubuntu-22.04..." -ForegroundColor Gray
+        
+        # 既存のディストリビューションを確認（複数の方法で）
+        $hasUbuntu2204 = $false
+        
+        # 方法1: wsl --list --quiet
+        $listOutput = & wsl.exe --list --quiet 2>$null | Out-String
+        if ($listOutput -match "Ubuntu-22\.04") {
+            $hasUbuntu2204 = $true
+            Write-Host "      Ubuntu-22.04 is already installed" -ForegroundColor Gray
+        }
+        
+        # 方法2: wsl -l -q (短縮形)
+        if (-not $hasUbuntu2204) {
+            $shortListOutput = & wsl.exe -l -q 2>$null | Out-String
+            if ($shortListOutput -match "Ubuntu-22\.04") {
+                $hasUbuntu2204 = $true
+                Write-Host "      Ubuntu-22.04 found (short form check)" -ForegroundColor Gray
+            }
+        }
+        
+        # Ubuntu-22.04がない場合、インストールを試みる
+        if (-not $hasUbuntu2204) {
+            Write-Host "      Ubuntu-22.04 not found, installing..." -ForegroundColor Gray
+            
+            # インストールを試みる
+            $installAttempted = $false
+            
+            try {
+                # 方法1: 直接インストール
+                Write-Host "      Running: wsl --install -d Ubuntu-22.04 --no-launch" -ForegroundColor Gray
+                $installOutput = & wsl.exe --install -d Ubuntu-22.04 --no-launch 2>&1 | Out-String
+                $installAttempted = $true
+                
+                # インストール結果の確認
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "      Installation command completed" -ForegroundColor Gray
+                } else {
+                    Write-ColorOutput Yellow "      Installation command returned exit code: $LASTEXITCODE"
+                }
+                
+                # インストール完了を待つ
+                Write-Host "      Waiting for installation to complete..." -ForegroundColor Gray
+                $maxWait = 60  # 60秒待機
+                $waited = 0
+                
+                while ($waited -lt $maxWait) {
+                    Start-Sleep -Seconds 5
+                    $waited += 5
+                    
+                    # 再チェック
+                    $currentList = & wsl.exe --list --quiet 2>$null | Out-String
+                    if ($currentList -match "Ubuntu-22\.04") {
+                        $hasUbuntu2204 = $true
+                        Write-Host "      Ubuntu-22.04 installation confirmed!" -ForegroundColor Green
+                        break
+                    }
+                    
+                    Write-Host "      Still waiting... ($waited/$maxWait seconds)" -ForegroundColor Gray
+                }
+                
+                # まだ見つからない場合、他のUbuntuバージョンを探す
+                if (-not $hasUbuntu2204) {
+                    Write-ColorOutput Yellow "Ubuntu-22.04 installation may have failed or is not available"
+                    
+                    # 他のUbuntuバージョンをチェック
+                    $currentList = & wsl.exe --list --quiet 2>$null | Out-String
+                    
+                    if ($currentList -match "^Ubuntu$") {
+                        Write-Host ""
+                        Write-ColorOutput Yellow "Default 'Ubuntu' is available. Would you like to use it instead?"
+                        Write-Host "Note: This may be a different version than 22.04"
+                        $useDefault = Read-Host "Use default Ubuntu? (y/N)"
+                        
+                        if ($useDefault -eq 'y') {
+                            $baseDistro = "Ubuntu"
+                            $hasUbuntu2204 = $true  # フラグを立てて続行
+                            Write-Host "      Using default Ubuntu as base" -ForegroundColor Gray
+                        }
+                    }
+                }
+            } catch {
+                Write-ColorOutput Red "Error during installation attempt: $_"
+            }
+        }
+        
+        # 最終確認
+        if (-not $hasUbuntu2204) {
+            Write-ColorOutput Red "Error: Could not find or install Ubuntu-22.04"
+            Write-Host ""
+            Write-Host "Please try one of the following:"
+            Write-Host "  1. Install Ubuntu-22.04 manually from Microsoft Store"
+            Write-Host "  2. Run in an elevated PowerShell: wsl --install -d Ubuntu-22.04"
+            Write-Host "  3. If Ubuntu-22.04 is not available in your region, install 'Ubuntu' instead"
+            return
+        }
+        
+        # 一時インスタンスとして再インポート
+        Write-Host "[2/5] Creating temporary instance..." -ForegroundColor White
+        
+        try {
+            Write-Host "      Exporting $baseDistro as base..." -ForegroundColor Gray
+            wsl --export $baseDistro $tempExport
+            
+            if (-not (Test-Path $tempExport)) {
+                throw "Export file was not created: $tempExport"
+            }
+            
+            Write-Host "      Creating temporary instance..." -ForegroundColor Gray
+            wsl --import $tempDistro $tempInstanceDir $tempExport
+            
+            if (-not (wsl --list --quiet | Select-String $tempDistro)) {
+                throw "Temporary instance was not created: $tempDistro"
+            }
+            
+            # エクスポートファイル削除（サイズが大きいため）
+            Remove-Item $tempExport -ErrorAction SilentlyContinue
+            
+        } catch {
+            Write-ColorOutput Red "Error creating temporary instance: $_"
+            if (Test-Path $tempExport) {
+                Remove-Item $tempExport -ErrorAction SilentlyContinue
+            }
+            return
+        }
+        
+        # IncludeDevTools が指定された場合、すべてのツールを含める
+        if ($IncludeDevTools) {
+            $IncludePodman = $true
+            $IncludeGitHubCLI = $true
+            $IncludeClaudeCode = $true
+        }
+        
+        # 最小化スクリプト実行
+        Write-Host "[3/5] Running minimization script..." -ForegroundColor White
+        if ($IncludePodman) {
+            Write-Host "      Including: Podman" -ForegroundColor Gray
+        }
+        if ($IncludeGitHubCLI) {
+            Write-Host "      Including: GitHub CLI" -ForegroundColor Gray
+        }
+        if ($IncludeClaudeCode) {
+            Write-Host "      Including: Claude Code" -ForegroundColor Gray
+        }
+        
+        $setupScript = Get-MinimalSetupScript -WithPodman $IncludePodman -WithGitHubCLI $IncludeGitHubCLI -WithClaudeCode $IncludeClaudeCode
+        $scriptPath = "$env:TEMP\minimal-setup-$$.sh"
+        $setupScript | Out-File -FilePath $scriptPath -Encoding UTF8 -NoNewline
+        
+        # スクリプト実行の改善
+        Write-Host "      Executing minimization script inside WSL..." -ForegroundColor Gray
+        
+        # スクリプトをWSL内にコピーして実行
+        $wslScriptPath = "/tmp/minimal-setup.sh"
+        Get-Content $scriptPath | wsl -d $tempDistro -u root bash -c "cat > $wslScriptPath && chmod +x $wslScriptPath"
+        
+        # WSL内でスクリプト実行
+        $exitCode = 0
+        try {
+            wsl -d $tempDistro -u root bash -c "/tmp/minimal-setup.sh"
+            $exitCode = $LASTEXITCODE
+        } catch {
+            Write-ColorOutput Red "Error during minimization script execution: $_"
+            $exitCode = 1
+        }
+        
+        # スクリプト実行結果確認
+        if ($exitCode -ne 0) {
+            Write-ColorOutput Yellow "Warning: Minimization script completed with exit code $exitCode"
+        } else {
+            Write-Host "      Minimization script completed successfully" -ForegroundColor Gray
+        }
+        
+        # 一時ファイル削除
+        wsl -d $tempDistro -u root bash -c "rm -f /tmp/minimal-setup.sh" 2>$null
+        Remove-Item $scriptPath -ErrorAction SilentlyContinue
+        
+        # エクスポート前の状態確認
+        Write-Host "      Verifying minimization results..." -ForegroundColor Gray
+        
+        # WSL内でサイズ確認
+        try {
+            $diskInfo = wsl -d $tempDistro -u root bash -c "df -h / 2>/dev/null | tail -1" 2>$null
+            if ($diskInfo) {
+                Write-Host "      Current disk usage: $diskInfo" -ForegroundColor Gray
+            }
+        } catch {
+            Write-Host "      Could not retrieve disk usage information" -ForegroundColor Gray
+        }
+        Write-Host "[4/5] Exporting minimal image..." -ForegroundColor White
+        wsl --terminate $tempDistro
+        wsl --export $tempDistro $BaseImagePath
+        
+        # サイズ確認と結果表示
+        if (Test-Path $BaseImagePath) {
+            $imageSize = [math]::Round((Get-Item $BaseImagePath).Length / 1MB, 2)
+            Write-Host "[5/5] Image created successfully!" -ForegroundColor Green
+        } else {
+            Write-ColorOutput Red "Error: Image file was not created at $BaseImagePath"
+            return
+        }
+        Write-Host ""
+        Write-ColorOutput Green "Summary:"
+        Write-Host "  Image path: $BaseImagePath"
+        Write-Host "  Image size: ${imageSize}MB"
+        Write-Host "  Base distro: $baseDistro"
+        Write-Host "  Features included:"
+        Write-Host "    - Minimal Ubuntu base"
+        if ($IncludePodman) {
+            Write-Host "    - Podman (container runtime)"
+        }
+        if ($IncludeGitHubCLI) {
+            Write-Host "    - GitHub CLI (gh)"
+        }
+        if ($IncludeClaudeCode) {
+            Write-Host "    - Claude Code"
+        }
+        
+    } finally {
+        # クリーンアップ（エラーハンドリング付き）
+        if (-not $KeepTempInstance) {
+            Write-Host ""
+            Write-Host "Cleaning up temporary instance..." -ForegroundColor Gray
+            
+            try {
+                # 一時インスタンスのクリーンアップ
+                if (wsl --list --quiet | Select-String $tempDistro) {
+                    wsl --terminate $tempDistro 2>$null
+                    Start-Sleep -Seconds 2
+                    wsl --unregister $tempDistro 2>$null
+                }
+                
+                # 一時ディレクトリのクリーンアップ
+                if (Test-Path $tempInstanceDir) {
+                    Remove-Item -Recurse -Force $tempInstanceDir -ErrorAction SilentlyContinue
+                }
+                
+                # 一時ファイルクリーンアップ
+                Get-ChildItem -Path $env:TEMP -Filter "ubuntu-temp-base-*.tar" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+                Get-ChildItem -Path $env:TEMP -Filter "minimal-setup-*.sh" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+                
+                # wsl-minimal-temp-* ディレクトリのクリーンアップ
+                Get-ChildItem -Path $env:TEMP -Filter "wsl-minimal-temp-*" -Directory -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                
+            } catch {
+                Write-ColorOutput Yellow "Warning: Some cleanup operations failed: $_"
+            }
+        } else {
+            Write-Host ""
+            Write-ColorOutput Yellow "Temporary instance '$tempDistro' was kept for debugging"
+            Write-Host "To manually clean up later:"
+            Write-Host "  wsl --unregister $tempDistro"
+            if (Test-Path $tempInstanceDir) {
+                Write-Host "  Remove-Item -Recurse -Force '$tempInstanceDir'"
+            }
+        }
+    }
+    
+    Write-Host ""
+    Write-ColorOutput Green "✓ Minimal base image created successfully!"
+    Write-Host ""
+    Write-Host "Next step: Create instances using this image"
+    Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action NewInstance -InstanceName myproject"
+}
+
+# 新規インスタンス作成
+function New-MinimalInstance {
+    param([string]$Name)
+    
+    if (-not $Name) {
+        Write-ColorOutput Red "Error: InstanceName is required"
+        Write-Host "Usage: .\$($MyInvocation.MyCommand.Name) -Action NewInstance -InstanceName <name>"
+        return
+    }
+    
+    Show-Header
+    Write-ColorOutput Green "Creating New Minimal Instance: $Name"
+    Write-Host ""
+    
+    # ベースイメージ確認
+    if (-not (Test-Path $BaseImagePath)) {
+        Write-ColorOutput Red "Error: Base image not found at $BaseImagePath"
+        Write-Host ""
+        Write-Host "Create a base image first:"
+        Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase"
+        return
+    }
+    
+    $distroName = "Ubuntu-Minimal-$Name"
+    $instancePath = "$env:USERPROFILE\WSL-Instances\$Name"
+    
+    # 既存チェック
+    if (wsl --list --quiet | Select-String $distroName) {
+        Write-ColorOutput Yellow "Instance '$distroName' already exists!"
+        return
+    }
+    
+    # インスタンス作成
+    Write-Host "Creating instance from minimal image..."
+    New-Item -ItemType Directory -Force -Path $instancePath | Out-Null
+    wsl --import $distroName $instancePath $BaseImagePath
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ""
+        Write-ColorOutput Green "✓ Instance created successfully!"
+        Write-Host ""
+        Write-Host "Instance name: $distroName"
+        Write-Host "Location: $instancePath"
+        Write-Host ""
+        Write-Host "Connect to instance:"
+        Write-ColorOutput Gray "  wsl -d $distroName"
+        Write-Host ""
+        Write-Host "Default user: wsluser"
+        
+        # サイズ情報
+        $imageSize = [math]::Round((Get-Item $BaseImagePath).Length / 1MB, 2)
+        Write-Host "Base image size: ${imageSize}MB"
+    }
+}
+
+# イメージ一覧表示
+function Show-ImageList {
+    Show-Header
+    Write-ColorOutput Green "Available Minimal Images"
+    Write-Host ""
+    
+    $imageDir = Split-Path $BaseImagePath -Parent
+    if (Test-Path $imageDir) {
+        $images = Get-ChildItem -Path $imageDir -Filter "*.tar" -File
+        
+        if ($images.Count -eq 0) {
+            Write-Host "No minimal images found in: $imageDir"
+        } else {
+            Write-Host "Images in: $imageDir"
+            Write-Host ""
+            $images | ForEach-Object {
+                $size = [math]::Round($_.Length / 1MB, 2)
+                Write-Host ("  {0,-40} {1,10} MB" -f $_.Name, $size)
+            }
+        }
+    } else {
+        Write-Host "Image directory not found: $imageDir"
+    }
+    
+    Write-Host ""
+    Write-ColorOutput Green "Active Minimal Instances"
+    Write-Host ""
+    
+    $instances = wsl --list --verbose | Select-String "Ubuntu-Minimal-"
+    if ($instances) {
+        Write-Host $instances
+    } else {
+        Write-Host "No minimal instances found."
+    }
+}
+
+# メイン処理
+switch ($Action) {
+    "CreateBase" {
+        New-MinimalBaseImage
+    }
+    "NewInstance" {
+        New-MinimalInstance -Name $InstanceName
+    }
+    "ListImages" {
+        Show-ImageList
+    }
+    "Info" {
+        Show-Info
+    }
+    default {
+        Show-Info
+    }
+}
