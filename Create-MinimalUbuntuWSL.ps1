@@ -383,10 +383,18 @@ rm -f /etc/cron.monthly/*
 rm -f /etc/update-motd.d/*
 echo "Minimal Ubuntu WSL Environment" > /etc/motd
 
+# ログインメッセージを無効化
+touch /root/.hushlogin
+touch /home/wsluser/.hushlogin 2>/dev/null || true
+
 # 7. ユーザー設定
 echo "[7/7] Setting up user..."
 useradd -m -s /bin/bash -G sudo wsluser 2>/dev/null || true
 echo "wsluser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# ユーザーのhushloginファイルを作成（ユーザー作成後）
+touch /home/wsluser/.hushlogin 2>/dev/null || true
+chown wsluser:wsluser /home/wsluser/.hushlogin 2>/dev/null || true
 
 '@
 
