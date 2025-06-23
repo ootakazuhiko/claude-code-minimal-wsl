@@ -171,12 +171,21 @@ function Get-MinimalSetupScript {
     $script = @'
 #!/bin/bash
 # Minimal Ubuntu Setup Script
-set -euo pipefail
+# Don't exit on errors - we'll handle them individually
+# set -e  # Commented out to prevent early exit
 
 echo "================================================="
 echo " Starting Ubuntu Minimization"
 echo "================================================="
 echo ""
+
+# デバッグ用のエラーハンドラ
+error_handler() {
+    local exit_code=$?
+    local line_no=${1:-$LINENO}
+    echo "Warning: Command failed at line $line_no with exit code $exit_code"
+    # Continue execution
+}
 
 # 環境変数設定
 export DEBIAN_FRONTEND=noninteractive
@@ -184,8 +193,8 @@ export DEBCONF_NONINTERACTIVE_SEEN=true
 
 # 1. 基本アップデート
 echo "[1/8] System update..."
-apt-get update >/dev/null 2>&1
-apt-get upgrade -y >/dev/null 2>&1
+apt-get update 2>&1 | tail -n 20 || error_handler
+apt-get upgrade -y 2>&1 | tail -n 20 || error_handler
 
 # 2. 必要最小限のパッケージをインストール
 echo "[2/8] Installing essential packages..."
@@ -200,7 +209,7 @@ apt-get install -y --no-install-recommends \
     systemd \
     systemd-sysv \
     dbus \
-    vim-tiny >/dev/null 2>&1
+    vim-tiny 2>&1 | tail -n 20 || error_handler
 
 # ロケール設定
 locale-gen en_US.UTF-8
@@ -471,105 +480,48 @@ if [ -f /etc/default/ubuntu-esm ]; then
     rm -f /etc/default/ubuntu-esm
 fi
 
-# 7. 初回起動時の修正スクリプトを設定
-echo "[7/8] Setting up first-boot fixes..."
+# 7. WSL起動時の問題を修正するための設定
+echo "[7/8] Setting up WSL startup fixes..."
 
-# 初回起動時に実行されるスクリプトを作成
-cat > /etc/profile.d/wsl-first-boot-fix.sh << 'FIRSTBOOT'
-#!/bin/bash
-# WSL first boot fix script
+# より単純なアプローチ: bashrcに直接追加
+cat >> /etc/bash.bashrc << 'BASHRCFIX'
 
-# Only run if marker file doesn't exist
-if [ ! -f /etc/wsl-first-boot-completed ]; then
-    # Fix DNS if needed
-    if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
-        # Remove WSL's symlink
+# WSL DNS Fix
+if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
+    if [ "$EUID" -eq 0 ]; then
         rm -f /etc/resolv.conf
-        
-        # Create proper resolv.conf
-        if systemctl is-active systemd-resolved >/dev/null 2>&1; then
-            ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-        else
-            cat > /etc/resolv.conf << 'EOF'
+        echo "nameserver 8.8.8.8" > /etc/resolv.conf
+        echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+        echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+    fi
+fi
+BASHRCFIX
+
+# root用の.bashrcにも追加
+cat >> /root/.bashrc << 'ROOTBASHRC'
+
+# WSL DNS Fix for root
+if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
+    rm -f /etc/resolv.conf
+    echo "nameserver 8.8.8.8" > /etc/resolv.conf
+    echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+fi
+ROOTBASHRC
+
+# resolv.confを事前に正しく設定
+rm -f /etc/resolv.conf
+cat > /etc/resolv.conf << 'DNSEOF'
 nameserver 8.8.8.8
 nameserver 8.8.4.4
 nameserver 1.1.1.1
-EOF
-        fi
-    fi
-    
-    # Create marker file
-    touch /etc/wsl-first-boot-completed
-fi
-FIRSTBOOT
+nameserver 1.0.0.1
+DNSEOF
 
-chmod +x /etc/profile.d/wsl-first-boot-fix.sh
-
-# systemd サービスとして初回起動修正を実装
-cat > /etc/systemd/system/wsl-init-fix.service << 'WSLINITSERVICE'
-[Unit]
-Description=WSL Initialization Fixes
-DefaultDependencies=no
-Before=sysinit.target
-After=systemd-remount-fs.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/wsl-init-fix.sh
-
-[Install]
-WantedBy=sysinit.target
-WSLINITSERVICE
-
-# 初回起動修正スクリプト
-cat > /usr/local/bin/wsl-init-fix.sh << 'WSLINITSCRIPT'
-#!/bin/bash
-# WSL initialization fix script
-
-# Fix resolv.conf if it's a symlink to WSL's version
-if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
-    echo "Fixing DNS configuration..."
-    rm -f /etc/resolv.conf
-    
-    # Wait for systemd-resolved to be ready
-    for i in {1..10}; do
-        if systemctl is-active systemd-resolved >/dev/null 2>&1; then
-            break
-        fi
-        sleep 1
-    done
-    
-    if [ -f /run/systemd/resolve/stub-resolv.conf ]; then
-        ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-    else
-        cat > /etc/resolv.conf << 'EOF'
-nameserver 127.0.0.53
-options edns0 trust-ad
-search .
-EOF
-    fi
-fi
-
-# Ensure .hushlogin files exist
-touch /root/.hushlogin 2>/dev/null
-[ -d /home/wsluser ] && touch /home/wsluser/.hushlogin && chown wsluser:wsluser /home/wsluser/.hushlogin 2>/dev/null
-
-# Disable MOTD if still active
-if [ -d /etc/update-motd.d ]; then
-    chmod -x /etc/update-motd.d/* 2>/dev/null || true
-fi
-
-# Ensure motd-news is disabled
-if [ -f /etc/default/motd-news ]; then
-    sed -i 's/ENABLED=1/ENABLED=0/' /etc/default/motd-news
-fi
-WSLINITSCRIPT
-
-chmod +x /usr/local/bin/wsl-init-fix.sh
-
-# サービスを有効化
-systemctl enable wsl-init-fix.service 2>/dev/null || true
+# resolv.confの自動生成を防ぐためのダミーファイル作成
+mkdir -p /run/resolvconf
+touch /run/resolvconf/resolv.conf
+ln -sf /etc/resolv.conf /run/resolvconf/resolv.conf
 
 # 8. ユーザー設定
 echo "[8/8] Setting up user..."
