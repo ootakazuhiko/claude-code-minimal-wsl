@@ -277,6 +277,11 @@ ESSENTIAL_PACKAGES=(
     sysvinit-utils
     tar
     util-linux
+    # DNS解決に必要なパッケージ
+    systemd-resolved
+    libnss-resolve
+    bind9-dnsutils
+    bind9-host
 )
 
 for package in "${ESSENTIAL_PACKAGES[@]}"; do
@@ -350,6 +355,7 @@ EOF
 chattr -i /etc/resolv.conf 2>/dev/null || true
 
 # 不要なサービスの無効化
+# systemd-resolved は DNS解決に必要なので無効化しない
 DISABLE_SERVICES=(
     accounts-daemon
     cron
@@ -364,6 +370,10 @@ for service in "${DISABLE_SERVICES[@]}"; do
     systemctl disable $service 2>/dev/null || true
     systemctl mask $service 2>/dev/null || true
 done
+
+# systemd-resolved が有効であることを確認
+systemctl unmask systemd-resolved 2>/dev/null || true
+systemctl enable systemd-resolved 2>/dev/null || true
 
 # journald設定（ログサイズ制限）
 mkdir -p /etc/systemd/journald.conf.d/
@@ -387,9 +397,28 @@ rm -f /etc/cron.daily/*
 rm -f /etc/cron.weekly/*
 rm -f /etc/cron.monthly/*
 
-# motd簡素化
-rm -f /etc/update-motd.d/*
-echo "Minimal Ubuntu WSL Environment" > /etc/motd
+# motd無効化 - すべてのメッセージを削除
+rm -rf /etc/update-motd.d
+mkdir -p /etc/update-motd.d
+echo "" > /etc/motd
+echo "" > /etc/motd.dynamic
+chmod -x /etc/update-motd.d/* 2>/dev/null || true
+
+# landscape-sysinfo 無効化
+if [ -f /etc/landscape/client.conf ]; then
+    echo "" > /etc/landscape/client.conf
+fi
+
+# Ubuntu Pro メッセージ無効化
+if [ -f /etc/apt/apt.conf.d/20apt-esm ]; then
+    rm -f /etc/apt/apt.conf.d/20apt-esm
+fi
+
+# systemd の motd 関連サービス無効化
+systemctl disable motd-news.service 2>/dev/null || true
+systemctl mask motd-news.service 2>/dev/null || true
+systemctl disable motd-news.timer 2>/dev/null || true
+systemctl mask motd-news.timer 2>/dev/null || true
 
 # 7. ユーザー設定
 echo "[7/7] Setting up user..."
@@ -416,9 +445,18 @@ if [ -f /etc/legal ]; then
     echo "" > /etc/legal
 fi
 
-# WSL特有のメッセージファイルも処理
-if [ -d /etc/update-motd.d ]; then
-    chmod -x /etc/update-motd.d/* 2>/dev/null || true
+# landscape-common の完全削除（メッセージの原因）
+apt-get remove -y --purge landscape-common 2>/dev/null || true
+
+# pam_motd 無効化
+sed -i 's/^session.*pam_motd.so/#&/' /etc/pam.d/login 2>/dev/null || true
+sed -i 's/^session.*pam_motd.so/#&/' /etc/pam.d/sshd 2>/dev/null || true
+
+# Welcome message 設定の無効化
+if [ -f /etc/default/motd-news ]; then
+    sed -i 's/ENABLED=1/ENABLED=0/' /etc/default/motd-news
+else
+    echo "ENABLED=0" > /etc/default/motd-news
 fi
 
 '@
@@ -725,16 +763,49 @@ else
 fi
 # DNS解決テスト
 echo "Testing DNS resolution..."
+
+# systemd-resolved の状態確認
+if systemctl is-active systemd-resolved >/dev/null 2>&1; then
+    echo "✓ systemd-resolved is active"
+else
+    echo "⚠ systemd-resolved is not active, attempting to start..."
+    systemctl start systemd-resolved 2>/dev/null || true
+fi
+
+# 複数の方法でDNS解決をテスト
+dns_working=false
+
+# Method 1: nslookup
 if command -v nslookup >/dev/null 2>&1; then
     if nslookup google.com >/dev/null 2>&1; then
-        echo "✓ DNS resolution working"
-    else
-        echo "⚠ DNS resolution may have issues"
-        echo "Available nameservers:"
-        cat /etc/resolv.conf 2>/dev/null || echo "No resolv.conf found"
+        echo "✓ DNS resolution working (nslookup)"
+        dns_working=true
     fi
-else
-    echo "nslookup not available for DNS testing"
+fi
+
+# Method 2: host
+if [ "$dns_working" = false ] && command -v host >/dev/null 2>&1; then
+    if host google.com >/dev/null 2>&1; then
+        echo "✓ DNS resolution working (host)"
+        dns_working=true
+    fi
+fi
+
+# Method 3: getent
+if [ "$dns_working" = false ] && command -v getent >/dev/null 2>&1; then
+    if getent hosts google.com >/dev/null 2>&1; then
+        echo "✓ DNS resolution working (getent)"
+        dns_working=true
+    fi
+fi
+
+if [ "$dns_working" = false ]; then
+    echo "⚠ DNS resolution may have issues"
+    echo "Available nameservers:"
+    cat /etc/resolv.conf 2>/dev/null || echo "No resolv.conf found"
+    echo ""
+    echo "systemd-resolved status:"
+    systemctl status systemd-resolved --no-pager 2>&1 | head -10
 fi
 
 echo ""
