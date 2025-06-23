@@ -25,7 +25,13 @@ param(
     [switch]$IncludeClaudeCode = $false,
     
     [Parameter(Mandatory=$false)]
-    [switch]$IncludeDevTools = $false
+    [switch]$IncludeDevTools = $false,
+    
+    [Parameter(Mandatory=$false)]
+    [switch]$DebugMode = $false,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$LogFile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +39,20 @@ $ErrorActionPreference = "Stop"
 # カラー出力
 function Write-ColorOutput($Color, $Text) {
     Write-Host $Text -ForegroundColor $Color
+}
+
+# ログ出力関数
+function Write-LogOutput($Text, $Level = "INFO") {
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "[$timestamp] [$Level] $Text"
+    
+    if ($DebugMode) {
+        Write-Host $logEntry -ForegroundColor Gray
+    }
+    
+    if (-not [string]::IsNullOrEmpty($LogFile)) {
+        Add-Content -Path $LogFile -Value $logEntry -Encoding UTF8
+    }
 }
 
 # ヘッダー表示
@@ -91,6 +111,12 @@ function Show-Info {
     Write-Host "  -IncludeGitHubCLI  Include GitHub CLI (gh)"
     Write-Host "  -IncludeClaudeCode Include Claude Code + Project Identifier"
     Write-Host "  -IncludeDevTools   Include all development tools (Podman + gh + Claude Code)"
+    Write-Host "  -DebugMode         Enable debug output during script execution"
+    Write-Host "  -LogFile           Save debug output to specified file"
+    Write-Host ""
+    Write-ColorOutput Yellow "Diagnostic Tools:"
+    Write-Host ""
+    Write-Host "  Debug-WSLIssues.ps1 - Investigate DNS and MOTD issues in WSL instances"
     Write-Host ""
     
     Write-Host "===================================================================================" -ForegroundColor DarkGray
@@ -397,35 +423,64 @@ rm -f /etc/cron.daily/*
 rm -f /etc/cron.weekly/*
 rm -f /etc/cron.monthly/*
 
-# motd無効化 - すべてのメッセージを削除
+# MOTD完全無効化 - より包括的なアプローチ
+echo "Completely disabling MOTD and login messages..."
+
+# 既存のMOTDファイルを完全に削除
 rm -rf /etc/update-motd.d
+rm -f /etc/motd
+rm -f /etc/motd.dynamic
+rm -f /run/motd.dynamic
+
+# 空のMOTDディレクトリを作成（一部のプロセスが期待するため）
 mkdir -p /etc/update-motd.d
-echo "" > /etc/motd
-echo "" > /etc/motd.dynamic
-chmod -x /etc/update-motd.d/* 2>/dev/null || true
 
-# landscape-sysinfo 無効化
-if [ -f /etc/landscape/client.conf ]; then
-    echo "" > /etc/landscape/client.conf
+# 完全に空のmotdファイルを作成
+touch /etc/motd
+chmod 644 /etc/motd
+
+# Ubuntu Pro と landscape 関連の完全削除
+echo "Removing Ubuntu Pro and landscape messages..."
+# ESMメッセージファイル削除
+rm -f /etc/apt/apt.conf.d/20apt-esm
+rm -f /etc/apt/apt.conf.d/99esm
+
+# landscape関連ファイル削除
+rm -rf /etc/landscape
+rm -rf /var/lib/landscape
+
+# Ubuntu advantage tools 無効化
+if [ -f /etc/ubuntu-advantage/uaclient.conf ]; then
+    rm -f /etc/ubuntu-advantage/uaclient.conf
 fi
 
-# Ubuntu Pro メッセージ無効化
-if [ -f /etc/apt/apt.conf.d/20apt-esm ]; then
-    rm -f /etc/apt/apt.conf.d/20apt-esm
-fi
-
-# systemd の motd 関連サービス無効化
+# systemd の motd 関連サービス完全無効化
+echo "Disabling systemd MOTD services..."
 systemctl disable motd-news.service 2>/dev/null || true
 systemctl mask motd-news.service 2>/dev/null || true
 systemctl disable motd-news.timer 2>/dev/null || true
 systemctl mask motd-news.timer 2>/dev/null || true
+
+# apport (エラーレポート) も無効化
+systemctl disable apport.service 2>/dev/null || true
+systemctl mask apport.service 2>/dev/null || true
+
+# Ubuntu telemetry 無効化
+if [ -f /etc/default/ubuntu-esm ]; then
+    rm -f /etc/default/ubuntu-esm
+fi
 
 # 7. ユーザー設定
 echo "[7/7] Setting up user..."
 useradd -m -s /bin/bash -G sudo wsluser 2>/dev/null || true
 echo "wsluser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# ログインメッセージを完全に無効化
+# ログインメッセージを完全に無効化 - 包括的アプローチ
+echo "Setting up complete login message suppression..."
+
+# すべてのユーザーに対して .hushlogin を設定
+echo "Creating .hushlogin files..."
+
 # rootユーザー
 touch /root/.hushlogin
 chmod 644 /root/.hushlogin
@@ -440,24 +495,65 @@ mkdir -p /etc/skel
 touch /etc/skel/.hushlogin
 chmod 644 /etc/skel/.hushlogin
 
-# Ubuntu特有のメッセージも無効化
+# Ubuntu特有のメッセージファイルを無効化
+echo "Removing Ubuntu-specific message files..."
 if [ -f /etc/legal ]; then
     echo "" > /etc/legal
 fi
 
-# landscape-common の完全削除（メッセージの原因）
-apt-get remove -y --purge landscape-common 2>/dev/null || true
+# landscape-common の完全削除（メッセージの主要原因）
+apt-get remove -y --purge landscape-common landscape-client 2>/dev/null || true
 
-# pam_motd 無効化
-sed -i 's/^session.*pam_motd.so/#&/' /etc/pam.d/login 2>/dev/null || true
-sed -i 's/^session.*pam_motd.so/#&/' /etc/pam.d/sshd 2>/dev/null || true
+# PAM設定でMOTD表示を完全に無効化
+echo "Disabling PAM MOTD modules..."
+# pam_motd を完全にコメントアウト
+sed -i 's/^session.*pam_motd\.so.*/#&/' /etc/pam.d/login 2>/dev/null || true
+sed -i 's/^session.*pam_motd\.so.*/#&/' /etc/pam.d/sshd 2>/dev/null || true
 
-# Welcome message 設定の無効化
-if [ -f /etc/default/motd-news ]; then
-    sed -i 's/ENABLED=1/ENABLED=0/' /etc/default/motd-news
-else
-    echo "ENABLED=0" > /etc/default/motd-news
+# Ubuntu 固有のログインメッセージ設定を無効化
+echo "Disabling Ubuntu login message configurations..."
+
+# motd-news 設定を無効化
+mkdir -p /etc/default
+cat > /etc/default/motd-news << 'EOF'
+ENABLED=0
+EOF
+
+# cloudflare DOH も無効化
+if [ -f /etc/systemd/resolved.conf ]; then
+    sed -i 's/^#*DNS=.*/DNS=8.8.8.8/' /etc/systemd/resolved.conf
 fi
+
+# Pro messages を生成するプロセスを無効化
+if [ -f /usr/bin/ubuntu-advantage ]; then
+    chmod -x /usr/bin/ubuntu-advantage 2>/dev/null || true
+fi
+
+# HWE update notifier 無効化
+if [ -f /usr/bin/update-notifier ]; then
+    chmod -x /usr/bin/update-notifier 2>/dev/null || true
+fi
+
+# landscape-sysinfo 無効化
+if [ -f /usr/bin/landscape-sysinfo ]; then
+    chmod -x /usr/bin/landscape-sysinfo 2>/dev/null || true
+fi
+
+# /etc/issue と /etc/issue.net を空にする
+echo "" > /etc/issue
+echo "" > /etc/issue.net
+
+# Ubuntu Pro 広告を完全に無効化
+mkdir -p /etc/ubuntu-advantage
+cat > /etc/ubuntu-advantage/uaclient.conf << 'EOF'
+contract_url: https://contracts.canonical.com
+security_url: https://ubuntu.com/security
+data_dir: /var/lib/ubuntu-advantage
+log_level: error
+log_file: /dev/null
+EOF
+
+echo "Login message suppression setup completed."
 
 '@
 
@@ -761,51 +857,129 @@ else
         echo "Critical error: Could not restore dpkg functionality"
     fi
 fi
+# DNS解決の詳細設定と検証
+echo "Configuring and testing DNS resolution..."
+
+# systemd-resolved を確実に有効化
+echo "Enabling systemd-resolved..."
+systemctl unmask systemd-resolved 2>/dev/null || true
+systemctl enable systemd-resolved 2>/dev/null || true
+systemctl start systemd-resolved 2>/dev/null || true
+
+# NSS設定の確認と修正
+echo "Configuring NSS for DNS resolution..."
+if [ -f /etc/nsswitch.conf ]; then
+    # DNS解決にsystemd-resolvedを使用するよう設定
+    if ! grep -q "resolve" /etc/nsswitch.conf; then
+        sed -i 's/^hosts:.*/hosts: files resolve [!UNAVAIL=return] dns myhostname/' /etc/nsswitch.conf
+        echo "Updated NSS configuration to use systemd-resolved"
+    fi
+else
+    echo "Creating nsswitch.conf for DNS resolution..."
+    cat > /etc/nsswitch.conf << 'EOF'
+passwd:         files
+group:          files
+shadow:         files
+gshadow:        files
+
+hosts:          files resolve [!UNAVAIL=return] dns myhostname
+networks:       files
+
+protocols:      db files
+services:       db files
+ethers:         db files
+rpc:            db files
+
+netgroup:       nis
+EOF
+fi
+
+# systemd-resolved の stub resolver を有効化
+echo "Configuring systemd-resolved stub resolver..."
+mkdir -p /etc/systemd/resolved.conf.d/
+cat > /etc/systemd/resolved.conf.d/wsl.conf << 'EOF'
+[Resolve]
+DNS=8.8.8.8 8.8.4.4 1.1.1.1 1.0.0.1
+FallbackDNS=208.67.222.222 208.67.220.220
+DNSSEC=no
+DNSOverTLS=no
+Cache=yes
+EOF
+
+# resolv.conf のシンボリックリンクを正しく設定
+echo "Setting up resolv.conf symlink..."
+rm -f /etc/resolv.conf
+ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+
+# systemd-resolved を再起動
+systemctl restart systemd-resolved 2>/dev/null || true
+sleep 2
+
 # DNS解決テスト
 echo "Testing DNS resolution..."
+dns_working=false
 
 # systemd-resolved の状態確認
 if systemctl is-active systemd-resolved >/dev/null 2>&1; then
     echo "✓ systemd-resolved is active"
 else
-    echo "⚠ systemd-resolved is not active, attempting to start..."
-    systemctl start systemd-resolved 2>/dev/null || true
+    echo "⚠ systemd-resolved is not active"
 fi
 
 # 複数の方法でDNS解決をテスト
-dns_working=false
+echo "Running DNS resolution tests..."
 
-# Method 1: nslookup
-if command -v nslookup >/dev/null 2>&1; then
-    if nslookup google.com >/dev/null 2>&1; then
-        echo "✓ DNS resolution working (nslookup)"
-        dns_working=true
-    fi
+# Test 1: getent (NSS経由)
+echo -n "Testing getent hosts google.com: "
+if getent hosts google.com >/dev/null 2>&1; then
+    echo "SUCCESS"
+    dns_working=true
+else
+    echo "FAILED"
 fi
 
-# Method 2: host
-if [ "$dns_working" = false ] && command -v host >/dev/null 2>&1; then
-    if host google.com >/dev/null 2>&1; then
-        echo "✓ DNS resolution working (host)"
-        dns_working=true
-    fi
+# Test 2: nslookup
+echo -n "Testing nslookup google.com: "
+if command -v nslookup >/dev/null 2>&1 && nslookup google.com >/dev/null 2>&1; then
+    echo "SUCCESS"
+    dns_working=true
+else
+    echo "FAILED"
 fi
 
-# Method 3: getent
-if [ "$dns_working" = false ] && command -v getent >/dev/null 2>&1; then
-    if getent hosts google.com >/dev/null 2>&1; then
-        echo "✓ DNS resolution working (getent)"
-        dns_working=true
-    fi
+# Test 3: host
+echo -n "Testing host google.com: "
+if command -v host >/dev/null 2>&1 && host google.com >/dev/null 2>&1; then
+    echo "SUCCESS"
+    dns_working=true
+else
+    echo "FAILED"
 fi
 
-if [ "$dns_working" = false ]; then
-    echo "⚠ DNS resolution may have issues"
-    echo "Available nameservers:"
-    cat /etc/resolv.conf 2>/dev/null || echo "No resolv.conf found"
-    echo ""
-    echo "systemd-resolved status:"
-    systemctl status systemd-resolved --no-pager 2>&1 | head -10
+# Test 4: dig
+echo -n "Testing dig google.com: "
+if command -v dig >/dev/null 2>&1 && dig google.com >/dev/null 2>&1; then
+    echo "SUCCESS"
+    dns_working=true
+else
+    echo "FAILED or dig not available"
+fi
+
+# 結果表示
+if [ "$dns_working" = true ]; then
+    echo "✓ DNS resolution is working"
+else
+    echo "⚠ DNS resolution has issues - debugging info:"
+    echo "--- resolv.conf ---"
+    cat /etc/resolv.conf 2>/dev/null || echo "No resolv.conf"
+    echo "--- nsswitch.conf hosts line ---"
+    grep "^hosts:" /etc/nsswitch.conf 2>/dev/null || echo "No hosts line"
+    echo "--- systemd-resolved status ---"
+    systemctl status systemd-resolved --no-pager 2>&1 | head -5
+    echo "--- resolvectl status ---"
+    if command -v resolvectl >/dev/null; then
+        resolvectl status 2>&1 | head -10
+    fi
 fi
 
 echo ""
