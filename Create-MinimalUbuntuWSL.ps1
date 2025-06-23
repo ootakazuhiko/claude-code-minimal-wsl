@@ -183,12 +183,12 @@ export DEBIAN_FRONTEND=noninteractive
 export DEBCONF_NONINTERACTIVE_SEEN=true
 
 # 1. 基本アップデート
-echo "[1/7] System update..."
+echo "[1/8] System update..."
 apt-get update >/dev/null 2>&1
 apt-get upgrade -y >/dev/null 2>&1
 
 # 2. 必要最小限のパッケージをインストール
-echo "[2/7] Installing essential packages..."
+echo "[2/8] Installing essential packages..."
 apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -207,7 +207,7 @@ locale-gen en_US.UTF-8
 update-locale LANG=en_US.UTF-8
 
 # 3. 不要なパッケージを削除
-echo "[3/7] Removing unnecessary packages..."
+echo "[3/8] Removing unnecessary packages..."
 REMOVE_PACKAGES=(
     # Snap関連
     snapd
@@ -320,11 +320,11 @@ for package in "${ESSENTIAL_PACKAGES[@]}"; do
 done
 
 # 4. 依存関係のクリーンアップ
-echo "[4/7] Cleaning up dependencies..."
+echo "[4/8] Cleaning up dependencies..."
 apt-get autoremove -y --purge >/dev/null 2>&1
 
 # 5. ドキュメントとキャッシュの削除
-echo "[5/7] Removing documentation and caches..."
+echo "[5/8] Removing documentation and caches..."
 
 # ドキュメント削除
 rm -rf /usr/share/doc/*
@@ -347,12 +347,13 @@ rm -rf /var/tmp/*
 find /var/log -type f -exec truncate -s 0 {} \;
 
 # 6. システム設定の最適化
-echo "[6/7] Optimizing system configuration..."
+echo "[6/8] Optimizing system configuration..."
 
-# WSL設定
+# WSL設定 - resolv.conf の自動生成を完全に無効化
 cat > /etc/wsl.conf << 'EOF'
 [boot]
 systemd=true
+command="/usr/local/bin/wsl-init-fix.sh"
 
 [network]
 generateHosts=true
@@ -366,6 +367,8 @@ options="metadata,umask=22,fmask=11"
 enabled=true
 appendWindowsPath=true
 EOF
+
+# wsl.conf が確実に読み込まれるようにする
 
 # DNS設定 - WSLが自動生成するresolv.confにフォールバック設定を追加
 cat > /etc/resolv.conf << 'EOF'
@@ -425,18 +428,17 @@ rm -f /etc/cron.monthly/*
 # MOTD完全無効化 - より包括的なアプローチ
 echo "Completely disabling MOTD and login messages..."
 
-# 既存のMOTDファイルを完全に削除
+# update-motd.d を削除し、その場所にダミーファイルを作成して再作成を防ぐ
 rm -rf /etc/update-motd.d
+touch /etc/update-motd.d
+chmod 000 /etc/update-motd.d
+
+# MOTDファイルを削除し空にする
 rm -f /etc/motd
 rm -f /etc/motd.dynamic
 rm -f /run/motd.dynamic
-
-# 空のMOTDディレクトリを作成（一部のプロセスが期待するため）
-mkdir -p /etc/update-motd.d
-
-# 完全に空のmotdファイルを作成
 touch /etc/motd
-chmod 644 /etc/motd
+chmod 444 /etc/motd
 
 # Ubuntu Pro と landscape 関連の完全削除
 echo "Removing Ubuntu Pro and landscape messages..."
@@ -469,8 +471,108 @@ if [ -f /etc/default/ubuntu-esm ]; then
     rm -f /etc/default/ubuntu-esm
 fi
 
-# 7. ユーザー設定
-echo "[7/7] Setting up user..."
+# 7. 初回起動時の修正スクリプトを設定
+echo "[7/8] Setting up first-boot fixes..."
+
+# 初回起動時に実行されるスクリプトを作成
+cat > /etc/profile.d/wsl-first-boot-fix.sh << 'FIRSTBOOT'
+#!/bin/bash
+# WSL first boot fix script
+
+# Only run if marker file doesn't exist
+if [ ! -f /etc/wsl-first-boot-completed ]; then
+    # Fix DNS if needed
+    if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
+        # Remove WSL's symlink
+        rm -f /etc/resolv.conf
+        
+        # Create proper resolv.conf
+        if systemctl is-active systemd-resolved >/dev/null 2>&1; then
+            ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+        else
+            cat > /etc/resolv.conf << 'EOF'
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 1.1.1.1
+EOF
+        fi
+    fi
+    
+    # Create marker file
+    touch /etc/wsl-first-boot-completed
+fi
+FIRSTBOOT
+
+chmod +x /etc/profile.d/wsl-first-boot-fix.sh
+
+# systemd サービスとして初回起動修正を実装
+cat > /etc/systemd/system/wsl-init-fix.service << 'WSLINITSERVICE'
+[Unit]
+Description=WSL Initialization Fixes
+DefaultDependencies=no
+Before=sysinit.target
+After=systemd-remount-fs.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/wsl-init-fix.sh
+
+[Install]
+WantedBy=sysinit.target
+WSLINITSERVICE
+
+# 初回起動修正スクリプト
+cat > /usr/local/bin/wsl-init-fix.sh << 'WSLINITSCRIPT'
+#!/bin/bash
+# WSL initialization fix script
+
+# Fix resolv.conf if it's a symlink to WSL's version
+if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
+    echo "Fixing DNS configuration..."
+    rm -f /etc/resolv.conf
+    
+    # Wait for systemd-resolved to be ready
+    for i in {1..10}; do
+        if systemctl is-active systemd-resolved >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    
+    if [ -f /run/systemd/resolve/stub-resolv.conf ]; then
+        ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+    else
+        cat > /etc/resolv.conf << 'EOF'
+nameserver 127.0.0.53
+options edns0 trust-ad
+search .
+EOF
+    fi
+fi
+
+# Ensure .hushlogin files exist
+touch /root/.hushlogin 2>/dev/null
+[ -d /home/wsluser ] && touch /home/wsluser/.hushlogin && chown wsluser:wsluser /home/wsluser/.hushlogin 2>/dev/null
+
+# Disable MOTD if still active
+if [ -d /etc/update-motd.d ]; then
+    chmod -x /etc/update-motd.d/* 2>/dev/null || true
+fi
+
+# Ensure motd-news is disabled
+if [ -f /etc/default/motd-news ]; then
+    sed -i 's/ENABLED=1/ENABLED=0/' /etc/default/motd-news
+fi
+WSLINITSCRIPT
+
+chmod +x /usr/local/bin/wsl-init-fix.sh
+
+# サービスを有効化
+systemctl enable wsl-init-fix.service 2>/dev/null || true
+
+# 8. ユーザー設定
+echo "[8/8] Setting up user..."
 useradd -m -s /bin/bash -G sudo wsluser 2>/dev/null || true
 echo "wsluser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
@@ -931,6 +1033,8 @@ fi
 if [ -f /etc/resolv.conf ]; then
     echo "✓ /etc/resolv.conf exists"
     cat /etc/resolv.conf
+    
+    # resolv.conf を保護はしない（systemd-resolved が管理する必要があるため）
 else
     echo "✗ ERROR: /etc/resolv.conf still missing!"
 fi
