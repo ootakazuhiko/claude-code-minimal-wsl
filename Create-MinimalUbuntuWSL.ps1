@@ -353,11 +353,10 @@ echo "[6/7] Optimizing system configuration..."
 cat > /etc/wsl.conf << 'EOF'
 [boot]
 systemd=true
-command=""
 
 [network]
-generateHosts=false
-generateResolvConf=true
+generateHosts=true
+generateResolvConf=false
 
 [automount]
 enabled=true
@@ -909,11 +908,32 @@ EOF
 # resolv.conf のシンボリックリンクを正しく設定
 echo "Setting up resolv.conf symlink..."
 rm -f /etc/resolv.conf
-ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 
-# systemd-resolved を再起動
+# systemd-resolved を先に再起動して stub-resolv.conf が生成されるのを待つ
 systemctl restart systemd-resolved 2>/dev/null || true
-sleep 2
+sleep 3
+
+# stub-resolv.conf が存在するか確認してリンク
+if [ -f /run/systemd/resolve/stub-resolv.conf ]; then
+    ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+    echo "✓ Successfully linked resolv.conf to systemd-resolved"
+else
+    # フォールバック: 手動で作成
+    echo "⚠ stub-resolv.conf not found, creating manual resolv.conf"
+    cat > /etc/resolv.conf << 'RESOLVEOF'
+nameserver 127.0.0.53
+options edns0 trust-ad
+search .
+RESOLVEOF
+fi
+
+# resolv.conf が存在することを確認
+if [ -f /etc/resolv.conf ]; then
+    echo "✓ /etc/resolv.conf exists"
+    cat /etc/resolv.conf
+else
+    echo "✗ ERROR: /etc/resolv.conf still missing!"
+fi
 
 # DNS解決テスト
 echo "Testing DNS resolution..."
@@ -994,6 +1014,15 @@ function New-MinimalBaseImage {
     Show-Header
     Write-ColorOutput Green "Creating Minimal Ubuntu Base Image"
     Write-Host ""
+    
+    # ログファイルの初期化
+    if (-not [string]::IsNullOrEmpty($LogFile)) {
+        $logDir = Split-Path $LogFile -Parent
+        if (-not [string]::IsNullOrEmpty($logDir) -and -not (Test-Path $logDir)) {
+            New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+        }
+        Write-LogOutput "Starting minimal base image creation" "INFO"
+    }
     
     # イメージ保存ディレクトリ作成
     $imageDir = Split-Path $BaseImagePath -Parent
