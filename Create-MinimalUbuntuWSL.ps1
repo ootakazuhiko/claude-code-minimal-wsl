@@ -1590,12 +1590,18 @@ function New-MinimalInstance {
     Write-ColorOutput Green "Creating New Minimal Instance: $Name"
     Write-Host ""
     
+    # ベースイメージパスを取得（グローバル変数を使用）
+    $imagePath = $script:BaseImagePath
+    
     # ベースイメージ確認
-    if (-not (Test-Path $BaseImagePath)) {
-        Write-ColorOutput Red "Error: Base image not found at $BaseImagePath"
+    if (-not (Test-Path $imagePath)) {
+        Write-ColorOutput Red "Error: Base image not found at $imagePath"
         Write-Host ""
         Write-Host "Create a base image first:"
         Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action CreateBase"
+        Write-Host ""
+        Write-Host "Or specify a custom image path:"
+        Write-ColorOutput Gray "  .\$($MyInvocation.MyCommand.Name) -Action NewInstance -InstanceName $Name -BaseImagePath <path>"
         return
     }
     
@@ -1611,7 +1617,7 @@ function New-MinimalInstance {
     # インスタンス作成
     Write-Host "Creating instance from minimal image..."
     New-Item -ItemType Directory -Force -Path $instancePath | Out-Null
-    wsl --import $distroName $instancePath $BaseImagePath
+    wsl --import $distroName $instancePath $imagePath
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
@@ -1626,7 +1632,7 @@ function New-MinimalInstance {
         Write-Host "Default user: wsluser"
         
         # サイズ情報
-        $imageSize = [math]::Round((Get-Item $BaseImagePath).Length / 1MB, 2)
+        $imageSize = [math]::Round((Get-Item $imagePath).Length / 1MB, 2)
         Write-Host "Base image size: ${imageSize}MB"
     }
 }
