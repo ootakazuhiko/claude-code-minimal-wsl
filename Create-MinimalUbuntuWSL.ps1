@@ -326,7 +326,7 @@ command=""
 
 [network]
 generateHosts=false
-generateResolvConf=false
+generateResolvConf=true
 
 [automount]
 enabled=true
@@ -337,17 +337,20 @@ enabled=true
 appendWindowsPath=true
 EOF
 
-# DNS設定
-rm -f /etc/resolv.conf
+# DNS設定 - WSLが自動生成するresolv.confにフォールバック設定を追加
 cat > /etc/resolv.conf << 'EOF'
+# This file will be overwritten by WSL, but provides fallback DNS
+nameserver 8.8.8.8
+nameserver 8.8.4.4
 nameserver 1.1.1.1
 nameserver 1.0.0.1
 EOF
 
+# resolv.confの書き込み保護を解除（WSLが更新できるように）
+chattr -i /etc/resolv.conf 2>/dev/null || true
+
 # 不要なサービスの無効化
 DISABLE_SERVICES=(
-    systemd-networkd
-    systemd-resolved
     accounts-daemon
     cron
     rsyslog
@@ -720,6 +723,20 @@ else
         echo "Critical error: Could not restore dpkg functionality"
     fi
 fi
+# DNS解決テスト
+echo "Testing DNS resolution..."
+if command -v nslookup >/dev/null 2>&1; then
+    if nslookup google.com >/dev/null 2>&1; then
+        echo "✓ DNS resolution working"
+    else
+        echo "⚠ DNS resolution may have issues"
+        echo "Available nameservers:"
+        cat /etc/resolv.conf 2>/dev/null || echo "No resolv.conf found"
+    fi
+else
+    echo "nslookup not available for DNS testing"
+fi
+
 echo ""
 echo "Minimization script completed successfully!"
 '@
