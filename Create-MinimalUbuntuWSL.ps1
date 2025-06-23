@@ -1003,6 +1003,77 @@ else
 fi
 
 echo ""
+echo "=== Post-minimization validation ==="
+
+# resolv.conf の最終確認と修正
+echo "Validating DNS configuration..."
+if [ ! -f /etc/resolv.conf ]; then
+    echo "WARNING: /etc/resolv.conf is missing, recreating..."
+    
+    # systemd-resolved が動作していることを確認
+    if systemctl is-active systemd-resolved >/dev/null 2>&1; then
+        if [ -f /run/systemd/resolve/stub-resolv.conf ]; then
+            ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+            echo "✓ Recreated resolv.conf symlink"
+        else
+            # 手動で作成
+            cat > /etc/resolv.conf << 'RESOLVEOF'
+nameserver 127.0.0.53
+options edns0 trust-ad
+search .
+RESOLVEOF
+            echo "✓ Created manual resolv.conf"
+        fi
+    else
+        # systemd-resolved が動作していない場合
+        cat > /etc/resolv.conf << 'RESOLVEOF'
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+nameserver 1.1.1.1
+RESOLVEOF
+        echo "✓ Created fallback resolv.conf"
+    fi
+fi
+
+# .hushlogin ファイルの最終確認
+echo "Validating login message suppression..."
+if [ ! -f /root/.hushlogin ]; then
+    echo "WARNING: /root/.hushlogin missing, recreating..."
+    touch /root/.hushlogin
+    chmod 644 /root/.hushlogin
+fi
+
+if [ -d /home/wsluser ] && [ ! -f /home/wsluser/.hushlogin ]; then
+    echo "WARNING: /home/wsluser/.hushlogin missing, recreating..."
+    touch /home/wsluser/.hushlogin
+    chown wsluser:wsluser /home/wsluser/.hushlogin
+    chmod 644 /home/wsluser/.hushlogin
+fi
+
+if [ ! -f /etc/skel/.hushlogin ]; then
+    echo "WARNING: /etc/skel/.hushlogin missing, recreating..."
+    mkdir -p /etc/skel
+    touch /etc/skel/.hushlogin
+    chmod 644 /etc/skel/.hushlogin
+fi
+
+# MOTD が確実に無効化されていることを確認
+if [ -d /etc/update-motd.d ]; then
+    chmod -x /etc/update-motd.d/* 2>/dev/null || true
+    echo "✓ MOTD scripts disabled"
+fi
+
+# 最終的なDNSテスト
+echo "Final DNS resolution test..."
+if getent hosts google.com >/dev/null 2>&1; then
+    echo "✓ DNS resolution confirmed working"
+else
+    echo "⚠ DNS resolution still has issues"
+    echo "Current resolv.conf:"
+    cat /etc/resolv.conf
+fi
+
+echo ""
 echo "Minimization script completed successfully!"
 '@
 
@@ -1319,6 +1390,56 @@ function New-MinimalBaseImage {
             }
         } catch {
             Write-Host "      Could not retrieve disk usage information" -ForegroundColor Gray
+        }
+        
+        # 重要ファイルの存在確認
+        Write-Host "      Verifying critical files..." -ForegroundColor Gray
+        
+        $verifyScript = @'
+echo "Checking critical files:"
+echo -n "  /etc/resolv.conf: "
+if [ -f /etc/resolv.conf ] || [ -L /etc/resolv.conf ]; then
+    echo "OK ($(ls -la /etc/resolv.conf | awk '{print $9, $10, $11}'))"
+else
+    echo "MISSING!"
+fi
+
+echo -n "  /root/.hushlogin: "
+if [ -f /root/.hushlogin ]; then
+    echo "OK"
+else
+    echo "MISSING!"
+fi
+
+echo -n "  /home/wsluser/.hushlogin: "
+if [ -f /home/wsluser/.hushlogin ]; then
+    echo "OK"
+else
+    echo "MISSING!"
+fi
+
+echo -n "  systemd-resolved: "
+if systemctl is-active systemd-resolved >/dev/null 2>&1; then
+    echo "ACTIVE"
+else
+    echo "INACTIVE"
+fi
+
+echo -n "  DNS resolution: "
+if getent hosts google.com >/dev/null 2>&1; then
+    echo "WORKING"
+else
+    echo "FAILED"
+fi
+'@
+        
+        $verifyResult = wsl -d $tempDistro -u root -- bash -c $verifyScript
+        Write-Host $verifyResult -ForegroundColor Gray
+        
+        # 問題が見つかった場合の警告
+        if ($verifyResult -match "MISSING!|INACTIVE|FAILED") {
+            Write-ColorOutput Yellow "      Warning: Some critical components may have issues"
+            Write-LogOutput "Verification found issues: $verifyResult" "WARNING"
         }
         Write-Host "[4/5] Exporting minimal image..." -ForegroundColor White
         wsl --terminate $tempDistro
