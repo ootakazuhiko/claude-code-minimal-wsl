@@ -643,17 +643,15 @@ rm -rf /var/lib/apt/lists/*
         # 修正: here-stringのエスケープ問題を解決
         $bashrcContent = @'
 # Claude Code settings
-export CLAUDE_CODE_HOME=/opt/claude-code
-export PATH=$PATH:$CLAUDE_CODE_HOME:$HOME/.local/bin
+export PATH=$PATH:$HOME/.local/bin
 
 # Claude Code completion (if available)
-if command -v claude-code &> /dev/null; then
-    eval "$(claude-code --completion-script bash 2>/dev/null || true)"
+if command -v claude &> /dev/null; then
+    eval "$(claude --completion-script bash 2>/dev/null || true)"
 fi
 
 # Claude Code aliases
-alias claude="claude-code"
-alias cc="claude-code"
+alias cc="claude"
 
 # Claude Project Identifier integration
 if [ -f "$HOME/.claude-project-identifier/init.sh" ]; then
@@ -718,18 +716,18 @@ echo "   a) Environment variable:"
 echo "      export ANTHROPIC_API_KEY='your-api-key'"
 echo "      echo 'export ANTHROPIC_API_KEY=\"your-api-key\"' >> ~/.bashrc"
 echo ""
-echo "   b) Claude Code config:"
-echo "      claude-code auth login"
+echo "   b) Claude CLI config:"
+echo "      claude auth login"
 echo ""
 echo "   c) Config file:"
-echo "      Edit ~/.config/claude-code/config.yaml"
+echo "      Edit ~/.config/claude/config.yaml"
 echo ""
 echo "3. Verify installation:"
-echo "   claude-code --version"
-echo "   claude-code --help"
+echo "   claude --version"
+echo "   claude --help"
 echo ""
 echo "4. Quick test:"
-echo "   echo 'Hello, Claude!' | claude-code"
+echo "   echo 'Hello, Claude!' | claude"
 echo ""
 echo "5. Claude Project Identifier setup:"
 echo "   # Create a new project"
@@ -751,20 +749,38 @@ echo ""
 echo "[$stepNum/X] Installing Claude Code..."
 
 # Claude Code の前提条件
-apt-get install -y --no-install-recommends python3 python3-venv python3-pip >/dev/null 2>&1
+echo "Installing Node.js for Claude Code..."
+# Node.js 20.x をインストール
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
+apt-get install -y nodejs >/dev/null 2>&1
 
-# Claude Code インストール用ディレクトリ
-mkdir -p /opt/claude-code
-chown -R wsluser:wsluser /opt/claude-code
+# npmが正しくインストールされたか確認
+if ! command -v npm >/dev/null 2>&1; then
+    echo "Error: npm installation failed"
+    return 1
+fi
 
 # Claude Code インストール
 echo "Installing Claude Code CLI..."
 
-# pipを使用してインストール（一般的なPythonパッケージの場合）
-su - wsluser -c "pip3 install --user claude-code" || {
-    echo "Note: Please refer to https://docs.anthropic.com/ja/docs/claude-code/getting-started"
-    echo "for the official installation instructions."
+# npm を使用してグローバルにインストール
+npm install -g @anthropic-ai/claude-code || {
+    echo "Error: Claude Code installation failed"
+    echo "Please check https://docs.anthropic.com/en/docs/claude-code for installation instructions"
 }
+
+# シンボリックリンクを作成（claude-codeがclaudeとしても使えるように）
+claude_path=$(which claude-code 2>/dev/null || which claude 2>/dev/null)
+if [ -n "$claude_path" ]; then
+    if [ ! -e /usr/bin/claude ]; then
+        ln -sf "$claude_path" /usr/bin/claude 2>/dev/null || true
+    fi
+    echo "Claude Code installed at: $claude_path"
+    # バージョン確認
+    claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "Warning: Could not verify Claude Code version"
+else
+    echo "Warning: Claude Code binary not found in PATH"
+fi
 
 # Claude Project Identifier インストール
 echo "Installing Claude Project Identifier..."
@@ -1127,6 +1143,35 @@ else
     echo "⚠ DNS resolution still has issues"
     echo "Current resolv.conf:"
     cat /etc/resolv.conf
+fi
+
+# インストールされたツールの確認
+echo ""
+echo "=== Installed Tools Verification ==="
+if command -v podman >/dev/null 2>&1; then
+    echo "✓ Podman: $(podman --version)"
+else
+    echo "✗ Podman: Not found"
+fi
+
+if command -v gh >/dev/null 2>&1; then
+    echo "✓ GitHub CLI: $(gh --version | head -1)"
+else
+    echo "✗ GitHub CLI: Not found"
+fi
+
+if command -v claude >/dev/null 2>&1 || command -v claude-code >/dev/null 2>&1; then
+    claude_version=$(claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "version unknown")
+    echo "✓ Claude Code: $claude_version"
+else
+    echo "✗ Claude Code: Not found"
+fi
+
+if command -v node >/dev/null 2>&1; then
+    echo "✓ Node.js: $(node --version)"
+    echo "✓ npm: $(npm --version)"
+else
+    echo "✗ Node.js: Not found"
 fi
 
 echo ""
