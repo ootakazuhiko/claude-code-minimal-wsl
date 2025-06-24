@@ -1400,14 +1400,19 @@ function New-MinimalBaseImage {
         
         Write-Host "      Preparing minimization script..." -ForegroundColor Gray
         
-        # スクリプトの内容をBase64エンコード（特殊文字の問題を回避）
-        $scriptBytes = [System.Text.Encoding]::UTF8.GetBytes($setupScript)
-        $scriptBase64 = [Convert]::ToBase64String($scriptBytes)
-        
-        # Base64デコードしてWSL内にスクリプトを作成
+        # スクリプトを一時ファイルに保存してコピー（コマンドライン長制限を回避）
         Write-Host "      Copying script to WSL instance..." -ForegroundColor Gray
-        $decodeCommand = "echo '$scriptBase64' | base64 -d > $wslScriptPath && chmod +x $wslScriptPath"
-        wsl -d $tempDistro -u root -- bash -c $decodeCommand
+        $tempScriptFile = "$env:TEMP\wsl-setup-script-$(Get-Random).sh"
+        $setupScript | Out-File -FilePath $tempScriptFile -Encoding UTF8 -NoNewline
+        
+        # ファイルをWSLにコピー（Windows パスを使用）
+        $windowsPath = $tempScriptFile.Replace('\', '/')
+        $wslWindowsPath = "/mnt/" + $windowsPath.Substring(0,1).ToLower() + $windowsPath.Substring(2)
+        $copyCommand = "cp '$wslWindowsPath' $wslScriptPath && chmod +x $wslScriptPath"
+        wsl -d $tempDistro -u root -- bash -c $copyCommand
+        
+        # 一時ファイルを削除
+        Remove-Item $tempScriptFile -ErrorAction SilentlyContinue
         
         # スクリプトの存在確認
         $checkCommand = "test -f $wslScriptPath && echo 'Script created successfully' || echo 'Script creation failed'"
@@ -1433,7 +1438,6 @@ function New-MinimalBaseImage {
         
         # 一時ファイル削除
         wsl -d $tempDistro -u root bash -c "rm -f /tmp/minimal-setup.sh" 2>$null
-        Remove-Item $scriptPath -ErrorAction SilentlyContinue
         
         # エクスポート前の状態確認
         Write-Host "      Verifying minimization results..." -ForegroundColor Gray
