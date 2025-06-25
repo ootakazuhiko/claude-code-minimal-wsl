@@ -752,7 +752,13 @@ echo ""
 echo "[$stepNum/X] Installing GitHub CLI..."
 
 # GitHub CLI GPGキー追加
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null 2>&1
+echo "  Downloading GitHub CLI GPG key..."
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /tmp/githubcli.gpg || {
+    echo "  ERROR: Failed to download GitHub CLI GPG key"
+    return 1
+}
+dd if=/tmp/githubcli.gpg of=/usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null 2>&1
+rm -f /tmp/githubcli.gpg
 
 # リポジトリ追加
 echo "deb [arch=`$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
@@ -881,8 +887,14 @@ echo "[9/X] Installing Claude Code..."
 
 # Claude Code の前提条件
 echo "Installing Node.js for Claude Code..."
+echo "  Downloading Node.js setup script..."
 # Node.js 20.x をインストール
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
+curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh || {
+    echo "  ERROR: Failed to download Node.js setup script"
+    return 1
+}
+bash /tmp/nodesource_setup.sh >/dev/null 2>&1
+rm -f /tmp/nodesource_setup.sh
 apt-get install -y nodejs >/dev/null 2>&1
 
 # npmが正しくインストールされたか確認
@@ -915,7 +927,7 @@ fi
 
 # Claude Project Identifier インストール
 echo "Installing Claude Project Identifier..."
-su - wsluser -c "curl -fsSL https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/install.sh | bash" || {
+su - wsluser -c "curl -fsSL https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/scripts/install.sh | bash" || {
     echo "Claude Project Identifier installation failed, trying alternative method..."
     
     # Manual installation fallback
@@ -923,7 +935,7 @@ su - wsluser -c "curl -fsSL https://raw.githubusercontent.com/ootakazuhiko/claud
     cd /home/wsluser/.claude-project-identifier
     
     # Download core files
-    curl -fsSL -o init.sh https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/init-project.sh 2>/dev/null || {
+    curl -fsSL -o init.sh https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/scripts/init-project.sh 2>/dev/null || {
         echo "Failed to download Claude Project Identifier files"
     }
     
@@ -992,7 +1004,13 @@ apt-get install -y --no-install-recommends \
 # Podmanリポジトリ追加
 . /etc/os-release
 echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_\${VERSION_ID}/ /" > /etc/apt/sources.list.d/podman.list
-curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_\${VERSION_ID}/Release.key" | apt-key add - >/dev/null 2>&1
+echo "  Downloading Podman GPG key..."
+curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_\${VERSION_ID}/Release.key" -o /tmp/podman.key || {
+    echo "  ERROR: Failed to download Podman GPG key"
+    return 1
+}
+apt-key add /tmp/podman.key >/dev/null 2>&1
+rm -f /tmp/podman.key
 
 # Podmanインストール
 apt-get update >/dev/null 2>&1
@@ -1754,23 +1772,35 @@ fi
 '@
         
         try {
-            $verifyResult = wsl -d $tempDistro -u root -- bash -c $verifyScript 2>$null
-            if ($verifyResult) {
+            $verifyLines = @()
+            $verifyOutput = wsl -d $tempDistro -u root -- bash -c $verifyScript 2>&1
+            if ($verifyOutput) {
+                # 文字列を確実に行に分割
+                $verifyLines = $verifyOutput -split "`r?`n" | Where-Object { $_.Trim() -ne "" }
+                
                 # 各行を個別に表示（インデント付き）
-                $verifyResult -split "`n" | ForEach-Object {
-                    if ($_ -match "MISSING!|INACTIVE|FAILED") {
-                        Write-Host "        $_" -ForegroundColor Yellow
+                foreach ($line in $verifyLines) {
+                    if ($line -match "MISSING!|INACTIVE|FAILED") {
+                        Write-Host "        $line" -ForegroundColor Yellow
                     } else {
-                        Write-Host "        $_" -ForegroundColor Gray
+                        Write-Host "        $line" -ForegroundColor Gray
                     }
                 }
             }
             
             # 問題が見つかった場合の警告
-            if ($verifyResult -match "MISSING!|INACTIVE|FAILED") {
+            $hasIssues = $false
+            foreach ($line in $verifyLines) {
+                if ($line -match "MISSING!|INACTIVE|FAILED") {
+                    $hasIssues = $true
+                    break
+                }
+            }
+            
+            if ($hasIssues) {
                 Write-Host ""
                 Write-Host "      Warning: Some critical components may have issues" -ForegroundColor Yellow
-                Write-LogOutput "Verification found issues: $verifyResult" "WARNING"
+                Write-LogOutput "Verification found issues in critical components" "WARNING"
             }
         } catch {
             Write-Host "      Could not verify critical files" -ForegroundColor Gray
