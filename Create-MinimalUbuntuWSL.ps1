@@ -543,6 +543,64 @@ echo "wsluser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 # ログインメッセージを完全に無効化 - 包括的アプローチ
 echo "Setting up complete login message suppression..."
 
+# Claude環境専用のプロンプト設定（ティール系）
+echo "Setting up Claude-specific teal prompt..."
+
+# プロンプト設定を.bashrcに追加する関数
+setup_claude_prompt() {
+    local target_file="$1"
+    
+    cat >> "$target_file" << 'CLAUDE_PROMPT'
+
+# Claude Code Environment - Teal Theme
+export PS1='\[\e[48;5;30m\]\[\e[97m\] 🤖 CLAUDE \[\e[0m\] \[\e[36m\]\u@\h\[\e[0m\]:\[\e[93m\]\w\[\e[0m\]\$ '
+
+# Claude environment indicator on login
+if [ -z "$CLAUDE_WELCOME_SHOWN" ]; then
+    echo -e "\e[48;5;30m\e[97m ╔══════════════════════════════════════╗ \e[0m"
+    echo -e "\e[48;5;30m\e[97m ║    🤖 Claude Code Environment        ║ \e[0m"
+    echo -e "\e[48;5;30m\e[97m ╚══════════════════════════════════════╝ \e[0m"
+    echo ""
+    export CLAUDE_WELCOME_SHOWN=1
+fi
+
+# Claude-specific aliases
+alias ll='ls -alF --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls -CF --color=auto'
+alias cls='clear'
+
+# Set terminal title to show Claude environment
+echo -ne "\033]0;🤖 Claude WSL - $(pwd)\007"
+
+# Update terminal title on directory change
+cd() {
+    builtin cd "$@"
+    echo -ne "\033]0;🤖 Claude WSL - $(pwd)\007"
+}
+CLAUDE_PROMPT
+}
+
+# /etc/skel/.bashrcに追加（新規ユーザー用）
+setup_claude_prompt "/etc/skel/.bashrc"
+
+# rootユーザーの.bashrcに追加
+setup_claude_prompt "/root/.bashrc"
+
+# wsluserの.bashrcに追加
+if [ -f /home/wsluser/.bashrc ]; then
+    setup_claude_prompt "/home/wsluser/.bashrc"
+fi
+
+# 他の既存ユーザーにも適用
+for user_home in /home/*; do
+    if [ -d "$user_home" ] && [ -f "$user_home/.bashrc" ] && [ "$(basename "$user_home")" != "lost+found" ]; then
+        setup_claude_prompt "$user_home/.bashrc"
+    fi
+done
+
+echo "Claude teal prompt setup completed."
+
 # すべてのユーザーに対して .hushlogin を設定
 echo "Creating .hushlogin files..."
 
@@ -1728,6 +1786,102 @@ fi
     Write-ColorOutput Gray "  .\Create-MinimalUbuntuWSL.ps1 -Action NewInstance -InstanceName myproject"
 }
 
+# Windows Terminal プロファイル設定関数
+function Set-ClaudeTerminalProfile {
+    param(
+        [string]$InstanceName,
+        [string]$BackgroundColor = "#001f1f"  # ティール色
+    )
+    
+    Write-Host "Setting up Windows Terminal profile..." -ForegroundColor Yellow
+    
+    $settingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+    
+    if (-not (Test-Path $settingsPath)) {
+        Write-Host "Windows Terminal not found, skipping profile setup" -ForegroundColor Gray
+        return
+    }
+    
+    try {
+        # 設定ファイルを読み込み
+        $settingsContent = Get-Content $settingsPath -Raw
+        $settings = $settingsContent | ConvertFrom-Json
+        
+        # Claude用カラースキーム追加
+        $claudeScheme = @{
+            "name" = "Claude-Teal"
+            "background" = "#001f1f"
+            "foreground" = "#ffffff"
+            "black" = "#000000"
+            "blue" = "#5eb7f7"
+            "brightBlue" = "#81d4fa"
+            "cyan" = "#4dd0e1"
+            "brightCyan" = "#84ffff"
+            "green" = "#69f0ae"
+            "brightGreen" = "#b9f6ca"
+            "purple" = "#ce93d8"
+            "brightPurple" = "#e1bee7"
+            "red" = "#ff5252"
+            "brightRed" = "#ff8a80"
+            "white" = "#eceff1"
+            "brightWhite" = "#ffffff"
+            "yellow" = "#ffeb3b"
+            "brightYellow" = "#ffff8d"
+            "gray" = "#546e7a"
+            "brightGray" = "#90a4ae"
+        }
+        
+        # 既存のスキームをチェック
+        if (-not $settings.schemes) {
+            $settings | Add-Member -MemberType NoteProperty -Name "schemes" -Value @() -Force
+        }
+        
+        $schemeExists = $settings.schemes | Where-Object { $_.name -eq "Claude-Teal" }
+        if (-not $schemeExists) {
+            $settings.schemes += $claudeScheme
+        }
+        
+        # Claude用プロファイル追加
+        $claudeProfile = @{
+            "name" = "$InstanceName 🤖"
+            "commandline" = "wsl.exe -d $InstanceName"
+            "colorScheme" = "Claude-Teal"
+            "icon" = "🤖"
+            "useAcrylic" = $true
+            "acrylicOpacity" = 0.85
+            "tabColor" = "#00bcd4"
+            "startingDirectory" = "//wsl$/$InstanceName/home/wsluser"
+            "font" = @{
+                "face" = "Cascadia Code"
+                "size" = 12
+            }
+        }
+        
+        # 既存プロファイルをチェック
+        $profileExists = $settings.profiles.list | Where-Object { $_.name -eq "$InstanceName 🤖" }
+        if ($profileExists) {
+            # 既存プロファイルを更新
+            $index = [array]::IndexOf($settings.profiles.list, $profileExists)
+            $settings.profiles.list[$index] = $claudeProfile
+        } else {
+            # 新規プロファイルを追加
+            $settings.profiles.list += $claudeProfile
+        }
+        
+        # 設定を保存（整形して保存）
+        $json = $settings | ConvertTo-Json -Depth 10
+        Set-Content -Path $settingsPath -Value $json -Encoding UTF8
+        
+        Write-ColorOutput Green "✓ Windows Terminal profile created: '$InstanceName 🤖'"
+        Write-Host "  Background: Teal (#001f1f) - Claude専用色" -ForegroundColor Gray
+        Write-Host "  Tab color: Cyan (#00bcd4)" -ForegroundColor Gray
+        Write-Host "  To use: Windows Terminal → Click dropdown → Select '$InstanceName 🤖'" -ForegroundColor Gray
+        
+    } catch {
+        Write-ColorOutput Yellow "Warning: Could not update Windows Terminal settings: $_"
+    }
+}
+
 # 新規インスタンス作成
 function New-MinimalInstance {
     param([string]$Name)
@@ -1772,6 +1926,9 @@ function New-MinimalInstance {
     wsl --import $distroName $instancePath $imagePath
     
     if ($LASTEXITCODE -eq 0) {
+        # Windows Terminal プロファイル設定
+        Set-ClaudeTerminalProfile -InstanceName $distroName
+        
         Write-Host ""
         Write-ColorOutput Green "✓ Instance created successfully!"
         Write-Host ""
@@ -1780,6 +1937,7 @@ function New-MinimalInstance {
         Write-Host ""
         Write-Host "Connect to instance:"
         Write-ColorOutput Gray "  wsl -d $distroName"
+        Write-Host "Or use Windows Terminal with the new '$distroName 🤖' profile (Teal background)"
         Write-Host ""
         Write-Host "Default user: wsluser"
         
