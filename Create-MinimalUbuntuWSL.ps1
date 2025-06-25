@@ -64,7 +64,7 @@ function Show-Header {
 ======================================
 
 Create ultra-lightweight Ubuntu images for WSL2
-- Standard Ubuntu: ~1.5GB → Minimal: ~500MB
+- Standard Ubuntu: ~1.5GB -> Minimal: ~500MB
 - Removed: snap, cloud-init, docs, unnecessary services
 - Optimized for containers and development
 
