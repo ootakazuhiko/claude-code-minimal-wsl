@@ -50,10 +50,10 @@ wsl -d Ubuntu-Minimal-myproject
 | Option | Description | Size Impact |
 |--------|-------------|-------------|
 | Base only | Minimal Ubuntu without Claude Code | ~500MB |
-| `+IncludeClaudeCode` | Claude Code CLI + Project Identifier | ~650MB |
-| `+IncludePodman` | Podman container runtime | ~850MB |
-| `+IncludeGitHubCLI` | GitHub CLI (gh) | ~700MB |
-| `+IncludeDevTools` | All tools combined | ~1GB |
+| `-IncludeClaudeCode` | Claude Code CLI + Project Identifier | ~650MB |
+| `-IncludePodman` | Podman container runtime | ~850MB |
+| `-IncludeGitHubCLI` | GitHub CLI (gh) | ~700MB |
+| `-IncludeDevTools` | All tools combined | ~1GB |
 
 ## Commands
 
@@ -245,10 +245,10 @@ wsl -d Ubuntu-Minimal-myproject
 | オプション | 説明 | サイズへの影響 |
 |-----------|------|-------------|
 | ベースのみ | Claude Codeなしの最小Ubuntu | ~500MB |
-| `+IncludeClaudeCode` | Claude Code CLI + Project Identifier | ~650MB |
-| `+IncludePodman` | Podmanコンテナランタイム | ~850MB |
-| `+IncludeGitHubCLI` | GitHub CLI (gh) | ~700MB |
-| `+IncludeDevTools` | 全ツール組み合わせ | ~1GB |
+| `-IncludeClaudeCode` | Claude Code CLI + Project Identifier | ~650MB |
+| `-IncludePodman` | Podmanコンテナランタイム | ~850MB |
+| `-IncludeGitHubCLI` | GitHub CLI (gh) | ~700MB |
+| `-IncludeDevTools` | 全ツール組み合わせ | ~1GB |
 
 ## コマンド
 
