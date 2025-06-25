@@ -723,9 +723,9 @@ ls -la /etc/systemd/resolved.conf.d/ 2>/dev/null | grep -v total | head -3
 echo ""
 echo "MOTD Configuration:"
 echo "  .hushlogin files:"
-ls -la /root/.hushlogin 2>/dev/null && echo "    ✓ /root/.hushlogin exists" || echo "    ✗ /root/.hushlogin missing"
-[ -f /home/wsluser/.hushlogin ] && echo "    ✓ /home/wsluser/.hushlogin exists" || echo "    ✗ /home/wsluser/.hushlogin missing"
-ls -la /etc/skel/.hushlogin 2>/dev/null && echo "    ✓ /etc/skel/.hushlogin exists" || echo "    ✗ /etc/skel/.hushlogin missing"
+ls -la /root/.hushlogin 2>/dev/null && echo "    [OK] /root/.hushlogin exists" || echo "    [--] /root/.hushlogin missing"
+[ -f /home/wsluser/.hushlogin ] && echo "    [OK] /home/wsluser/.hushlogin exists" || echo "    [--] /home/wsluser/.hushlogin missing"
+ls -la /etc/skel/.hushlogin 2>/dev/null && echo "    [OK] /etc/skel/.hushlogin exists" || echo "    [--] /etc/skel/.hushlogin missing"
 
 echo "  MOTD scripts executable status:"
 executable_motd_count=$(find /etc/update-motd.d -type f -executable 2>/dev/null | wc -l)
@@ -766,7 +766,7 @@ dd if=/tmp/githubcli.gpg of=/usr/share/keyrings/githubcli-archive-keyring.gpg >/
 rm -f /tmp/githubcli.gpg
 
 # リポジトリ追加
-echo "deb [arch=`$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
 
 # インストール
 apt-get update >/dev/null 2>&1
@@ -816,12 +816,12 @@ npm install -g @anthropic-ai/claude-code 2>&1 | grep -v "^npm notice" | grep -v 
 }
 
 # シンボリックリンクを作成（claude-codeがclaudeとしても使えるように）
-claude_path=`$(command -v claude-code 2>/dev/null || command -v claude 2>/dev/null)
-if [ -n "`$claude_path" ]; then
+claude_path=$(command -v claude-code 2>/dev/null || command -v claude 2>/dev/null)
+if [ -n "$claude_path" ]; then
     if [ ! -e /usr/bin/claude ]; then
-        ln -sf "`$claude_path" /usr/bin/claude 2>/dev/null || true
+        ln -sf "$claude_path" /usr/bin/claude 2>/dev/null || true
     fi
-    echo "Claude Code installed at: `$claude_path"
+    echo "Claude Code installed at: $claude_path"
     # バージョン確認
     claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "Warning: Could not verify Claude Code version"
 else
@@ -1217,9 +1217,9 @@ fi
 
 # 結果表示
 if [ "$dns_working" = true ]; then
-    echo "✓ DNS resolution is working"
+    echo "[OK] DNS resolution is working"
 else
-    echo "⚠ DNS resolution has issues - debugging info:"
+    echo "[WARNING] DNS resolution has issues - debugging info:"
     echo "--- resolv.conf ---"
     cat /etc/resolv.conf 2>/dev/null || echo "No resolv.conf"
     echo "--- nsswitch.conf hosts line ---"
@@ -1252,7 +1252,7 @@ nameserver 127.0.0.53
 options edns0 trust-ad
 search .
 RESOLVEOF
-            echo "✓ Created manual resolv.conf"
+            echo "[OK] Created manual resolv.conf"
         fi
     else
         # systemd-resolved が動作していない場合
@@ -1261,7 +1261,7 @@ nameserver 8.8.8.8
 nameserver 8.8.4.4
 nameserver 1.1.1.1
 RESOLVEOF
-        echo "✓ Created fallback resolv.conf"
+        echo "[OK] Created fallback resolv.conf"
     fi
 fi
 
@@ -1290,13 +1290,13 @@ fi
 # MOTD が確実に無効化されていることを確認
 if [ -d /etc/update-motd.d ]; then
     chmod -x /etc/update-motd.d/* 2>/dev/null || true
-    echo "✓ MOTD scripts disabled"
+    echo "[OK] MOTD scripts disabled"
 fi
 
 # 最終的なDNSテスト
 echo "Final DNS resolution test..."
 if getent hosts google.com >/dev/null 2>&1; then
-    echo "✓ DNS resolution confirmed working"
+    echo "[OK] DNS resolution confirmed working"
 else
     echo "⚠ DNS resolution still has issues"
     echo "Current resolv.conf:"
@@ -1307,29 +1307,29 @@ fi
 echo ""
 echo "=== Installed Tools Verification ==="
 if command -v podman >/dev/null 2>&1; then
-    echo "✓ Podman: `$(podman --version)"
+    echo "[OK] Podman: $(podman --version)"
 else
-    echo "✗ Podman: Not found"
+    echo "[--] Podman: Not found"
 fi
 
 if command -v gh >/dev/null 2>&1; then
-    echo "✓ GitHub CLI: `$(gh --version | head -1)"
+    echo "[OK] GitHub CLI: $(gh --version | head -1)"
 else
-    echo "✗ GitHub CLI: Not found"
+    echo "[--] GitHub CLI: Not found"
 fi
 
 if command -v claude >/dev/null 2>&1 || command -v claude-code >/dev/null 2>&1; then
-    claude_version=`$(claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "version unknown")
-    echo "✓ Claude Code: `$claude_version"
+    claude_version=$(claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "version unknown")
+    echo "[OK] Claude Code: $claude_version"
 else
-    echo "✗ Claude Code: Not found"
+    echo "[--] Claude Code: Not found"
 fi
 
 if command -v node >/dev/null 2>&1; then
-    echo "✓ Node.js: `$(node --version)"
-    echo "✓ npm: `$(npm --version)"
+    echo "[OK] Node.js: $(node --version)"
+    echo "[OK] npm: $(npm --version)"
 else
-    echo "✗ Node.js: Not found"
+    echo "[--] Node.js: Not found"
 fi
 
 echo ""
