@@ -109,18 +109,39 @@ else
 fi
 '@
 
-# Base64エンコード
-$encodedScript = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($testScript))
+# スクリプトをファイルに保存してコピー（改行文字の問題を回避）
+$tempScriptFile = "$env:TEMP\wsl-test-script-$(Get-Random).sh"
 
 try {
     Write-Host "Running tests on instance: $InstanceName" -ForegroundColor Yellow
     Write-Host ""
     
-    # WSLでテストスクリプトを実行
-    $result = wsl -d $InstanceName -- bash -c "echo '$encodedScript' | base64 -d | bash"
+    # UTF8 without BOM でファイルに保存し、LF改行にする
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($tempScriptFile, $testScript.Replace("`r`n", "`n"), $utf8NoBom)
+    
+    # ファイルをWSLにコピー
+    $windowsPath = $tempScriptFile.Replace('\', '/')
+    $wslWindowsPath = "/mnt/" + $windowsPath.Substring(0,1).ToLower() + $windowsPath.Substring(2)
+    $wslScriptPath = "/tmp/test-script.sh"
+    
+    # ファイルをコピーして実行
+    $copyCommand = "cp '$wslWindowsPath' $wslScriptPath && chmod +x $wslScriptPath"
+    wsl -d $InstanceName -- bash -c $copyCommand
+    
+    # スクリプトを実行
+    $result = wsl -d $InstanceName -- bash $wslScriptPath
     
     Write-Host $result
     
+    # クリーンアップ
+    wsl -d $InstanceName -- bash -c "rm -f $wslScriptPath"
+    
 } catch {
     Write-ColorOutput Red "Error running tests: $_"
+} finally {
+    # 一時ファイルを削除
+    if (Test-Path $tempScriptFile) {
+        Remove-Item $tempScriptFile -ErrorAction SilentlyContinue
+    }
 }

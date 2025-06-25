@@ -1445,10 +1445,13 @@ function New-MinimalBaseImage {
         
         Write-Host "      Preparing minimization script..." -ForegroundColor Gray
         
-        # スクリプトを一時ファイルに保存してコピー（コマンドライン長制限を回避）
+        # スクリプトを一時ファイルに保存してコピー（コマンドライン長制限と改行文字の問題を回避）
         Write-Host "      Copying script to WSL instance..." -ForegroundColor Gray
         $tempScriptFile = "$env:TEMP\wsl-setup-script-$(Get-Random).sh"
-        $setupScript | Out-File -FilePath $tempScriptFile -Encoding UTF8 -NoNewline
+        
+        # UTF8 without BOM でファイルに保存し、LF改行にする
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($tempScriptFile, $setupScript.Replace("`r`n", "`n"), $utf8NoBom)
         
         # ファイルをWSLにコピー（Windows パスを使用）
         $windowsPath = $tempScriptFile.Replace('\', '/')
