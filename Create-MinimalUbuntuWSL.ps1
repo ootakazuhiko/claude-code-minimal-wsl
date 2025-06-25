@@ -31,6 +31,9 @@ param(
     [switch]$DebugMode = $false,
     
     [Parameter(Mandatory=$false)]
+    [switch]$Verbose = $false,
+    
+    [Parameter(Mandatory=$false)]
     [string]$LogFile = ""
 )
 
@@ -111,7 +114,8 @@ function Show-Info {
     Write-Host "  -IncludeGitHubCLI  Include GitHub CLI (gh)"
     Write-Host "  -IncludeClaudeCode Include Claude Code + Project Identifier"
     Write-Host "  -IncludeDevTools   Include all development tools (Podman + gh + Claude Code)"
-    Write-Host "  -DebugMode         Enable debug output during script execution"
+    Write-Host "  -DebugMode         Enable full debug output during script execution"
+    Write-Host "  -Verbose           Show detailed output (less than DebugMode)"
     Write-Host "  -LogFile           Save debug output to specified file"
     Write-Host ""
     Write-ColorOutput Yellow "Diagnostic Tools:"
@@ -927,20 +931,38 @@ fi
 
 # Claude Project Identifier インストール
 echo "Installing Claude Project Identifier..."
-su - wsluser -c "curl -fsSL https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/scripts/install.sh | bash" || {
-    echo "Claude Project Identifier installation failed, trying alternative method..."
+
+# インストール前にgitが利用可能か確認
+if ! command -v git >/dev/null 2>&1; then
+    echo "  ERROR: git is not available for Claude Project Identifier installation"
+    echo "  Skipping Claude Project Identifier installation..."
+else
+    echo "  Downloading installation script..."
     
-    # Manual installation fallback
-    mkdir -p /home/wsluser/.claude-project-identifier
-    cd /home/wsluser/.claude-project-identifier
-    
-    # Download core files
-    curl -fsSL -o init.sh https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/scripts/init-project.sh 2>/dev/null || {
-        echo "Failed to download Claude Project Identifier files"
+    # より詳細なエラー出力でインストールスクリプトを実行
+    su - wsluser -c "
+        export DEBIAN_FRONTEND=noninteractive
+        curl -fsSL https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/scripts/install.sh 2>/dev/null | bash -s 2>&1
+    " || {
+        echo "  Claude Project Identifier installation failed, trying manual installation..."
+        
+        # Manual installation fallback - より安全な方法
+        mkdir -p /home/wsluser/.claude-project-identifier
+        cd /home/wsluser/.claude-project-identifier
+        
+        echo "  Downloading core files manually..."
+        
+        # 個別にファイルをダウンロード
+        curl -fsSL -o init.sh https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/scripts/init-project.sh 2>/dev/null && {
+            chmod +x init.sh
+            chown wsluser:wsluser init.sh
+            echo "  Manual installation completed"
+        } || {
+            echo "  Manual installation also failed - Claude Project Identifier will not be available"
+            rm -rf /home/wsluser/.claude-project-identifier
+        }
     }
-    
-    # Make executable
-    chmod +x init.sh 2>/dev/null || true
+fi
     
     # Create command symlink
     mkdir -p /home/wsluser/.local/bin
@@ -1690,8 +1712,21 @@ function New-MinimalBaseImage {
                 $scriptOutput = wsl -d $tempDistro -u root -- bash $wslScriptPath 2>&1
                 $exitCode = $LASTEXITCODE
                 
-                if ($DebugMode -or $exitCode -ne 0) {
-                    Write-Host "      Script output:" -ForegroundColor Gray
+                # エラー時は常に最後の数行を表示、デバッグモードの場合は全出力を表示
+                if ($exitCode -ne 0) {
+                    Write-Host "      Script execution failed. Last output:" -ForegroundColor Yellow
+                    # 最後の10行を表示
+                    $outputLines = $scriptOutput -split "`n"
+                    $lastLines = $outputLines | Select-Object -Last 10
+                    foreach ($line in $lastLines) {
+                        if ($line.Trim() -ne "") {
+                            Write-Host "        $line" -ForegroundColor DarkGray
+                        }
+                    }
+                }
+                
+                if ($DebugMode -or $Verbose) {
+                    Write-Host "      Full script output:" -ForegroundColor Gray
                     Write-Host $scriptOutput -ForegroundColor DarkGray
                 }
                 
