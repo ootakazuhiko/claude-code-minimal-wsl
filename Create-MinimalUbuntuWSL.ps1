@@ -751,7 +751,7 @@ echo ""
     
     # GitHub CLI インストール
     if ($WithGitHubCLI) {
-        $script += @"
+        $script += @'
 
 # $stepNum. GitHub CLI インストール
 echo "[$stepNum/X] Installing GitHub CLI..."
@@ -776,14 +776,14 @@ apt-get install -y --no-install-recommends gh >/dev/null 2>&1
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
-"@
+'@
         $stepNum++
     }
     
     # Claude Code インストール
     if ($WithClaudeCode) {
 
-        $script += @"
+        $script += @'
 
 # 9. Claude Code インストール
 echo "[9/X] Installing Claude Code..."
@@ -992,13 +992,13 @@ rm -rf /var/lib/apt/lists/*
 echo "Claude Code installation completed."
 echo "Run '/opt/claude-code/setup-claude-code.sh' for setup instructions."
 
-"@
+'@
         $stepNum++
     }
 
     # Podman インストール
     if ($WithPodman) {
-        $script += @"
+        $script += @'
 
 # $stepNum. Podman インストール
 echo "[$stepNum/X] Installing Podman..."
@@ -1032,7 +1032,7 @@ usermod --add-subuids 100000-165535 --add-subgids 100000-165535 wsluser 2>/dev/n
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
-"@
+'@
         $stepNum++
     }
 
