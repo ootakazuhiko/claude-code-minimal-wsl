@@ -86,10 +86,10 @@ function Set-ClaudeTerminalProfile {
         
         # Claude用プロファイル追加
         $claudeProfile = @{
-            "name" = "$InstanceName 🤖"
+            "name" = "$InstanceName [Claude]"
             "commandline" = "wsl.exe -d $InstanceName"
             "colorScheme" = "Claude-Dark-Teal"
-            "icon" = "🤖"
+            "icon" = "ms-appx:///ProfileIcons/{61c54bbd-c2c6-5271-96e7-009a87ff44bf}.png"
             "useAcrylic" = $true
             "acrylicOpacity" = 0.90
             "tabColor" = "#00796b"

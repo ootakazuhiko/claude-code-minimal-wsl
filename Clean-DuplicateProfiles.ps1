@@ -83,7 +83,8 @@ try {
             foreach ($profile in $profiles) {
                 $info = "    - Name: '$($profile.name)'"
                 if ($profile.source) { $info += ", Source: $($profile.source)" }
-                if ($profile.icon -eq "🤖") { 
+                if ($profile.icon -eq "ms-appx:///ProfileIcons/{61c54bbd-c2c6-5271-96e7-009a87ff44bf}.png" -or 
+                    $profile.name -like "*[Claude]*") { 
                     $info += " [Claude Theme]"
                     $keepProfile = $profile
                 }
