@@ -1488,7 +1488,8 @@ function New-MinimalBaseImage {
                                 $currentDistros | ForEach-Object { Write-Host "        - $_" -ForegroundColor Gray }
                                 Write-Host ""
                                 Write-Host "      Expected one of: Ubuntu-22.04, Ubuntu 22.04 LTS, or Ubuntu" -ForegroundColor Yellow
-                                throw "No suitable Ubuntu distribution found after installation timeout"
+                                Write-ColorOutput Red "Error: No suitable Ubuntu distribution found after installation timeout"
+                                return
                             }
                         }
                     } else {
@@ -1517,10 +1518,12 @@ function New-MinimalBaseImage {
                                 # この場合、後続の処理でUbuntu-22.04の代わりにUbuntuを使用
                                 $global:UseDefaultUbuntu = $true
                             } else {
-                                throw "Ubuntu-22.04 installation required"
+                                Write-ColorOutput Red "Error: Ubuntu-22.04 installation required"
+                                return
                             }
                         } else {
-                            throw "No suitable Ubuntu distribution found"
+                            Write-ColorOutput Red "Error: No suitable Ubuntu distribution found"
+                            return
                         }
                     }
                 }
@@ -1577,7 +1580,8 @@ function New-MinimalBaseImage {
             wsl --export $baseDistro $tempExport
             
             if (-not (Test-Path $tempExport)) {
-                throw "Export file was not created: $tempExport"
+                Write-ColorOutput Red "Error: Export file was not created: $tempExport"
+                return
             }
             
             Write-Host "      Creating temporary instance..." -ForegroundColor Gray
@@ -1596,7 +1600,8 @@ function New-MinimalBaseImage {
             $tempCheck | ForEach-Object { Write-Host "        - $_" -ForegroundColor DarkGray }
             
             if ($tempCheck -notcontains $tempDistro) {
-                throw "Temporary instance was not created: $tempDistro"
+                Write-ColorOutput Red "Error: Temporary instance was not created: $tempDistro"
+                return
             }
             
             Write-Host "      Temporary instance created successfully: $tempDistro" -ForegroundColor Gray
@@ -2174,24 +2179,37 @@ if (-not (Test-WSLInstalled)) {
     Write-Host ""
     Write-Host "For more information:" -ForegroundColor Yellow
     Write-Host "  https://learn.microsoft.com/en-us/windows/wsl/install" -ForegroundColor Gray
-    exit 1
+    return
 }
 
 # メイン処理
-switch ($Action) {
-    "CreateBase" {
-        New-MinimalBaseImage
+try {
+    switch ($Action) {
+        "CreateBase" {
+            New-MinimalBaseImage
+        }
+        "NewInstance" {
+            New-MinimalInstance -Name $InstanceName
+        }
+        "ListImages" {
+            Show-ImageList
+        }
+        "Info" {
+            Show-Info
+        }
+        default {
+            Show-Info
+        }
     }
-    "NewInstance" {
-        New-MinimalInstance -Name $InstanceName
-    }
-    "ListImages" {
-        Show-ImageList
-    }
-    "Info" {
-        Show-Info
-    }
-    default {
-        Show-Info
-    }
+} catch {
+    Write-Host ""
+    Write-ColorOutput Red "An unexpected error occurred: $_"
+    Write-Host ""
+    Write-Host "If this error persists, please check:" -ForegroundColor Yellow
+    Write-Host "  1. WSL is properly installed and running" -ForegroundColor Gray
+    Write-Host "  2. You have sufficient disk space" -ForegroundColor Gray
+    Write-Host "  3. PowerShell execution policy allows script execution" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "For troubleshooting, see:" -ForegroundColor Yellow
+    Write-Host "  https://github.com/ootakazuhiko/claude-code-minimal-wsl/blob/main/TROUBLESHOOTING.md" -ForegroundColor Gray
 }
