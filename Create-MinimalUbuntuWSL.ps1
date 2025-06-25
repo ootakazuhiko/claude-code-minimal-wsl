@@ -2042,6 +2042,40 @@ function Show-ImageList {
     }
 }
 
+# WSLの存在確認
+function Test-WSLInstalled {
+    try {
+        $wslVersion = wsl --version 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+    } catch {
+        # WSLコマンドが見つからない
+    }
+    
+    # wsl.exeの存在を直接確認
+    $wslPath = "$env:SystemRoot\System32\wsl.exe"
+    if (Test-Path $wslPath) {
+        return $true
+    }
+    
+    return $false
+}
+
+# WSL確認
+if (-not (Test-WSLInstalled)) {
+    Write-ColorOutput Red "Error: WSL is not installed on this system."
+    Write-Host ""
+    Write-Host "Please install WSL first:" -ForegroundColor Yellow
+    Write-Host "  1. Open PowerShell as Administrator" -ForegroundColor Gray
+    Write-Host "  2. Run: wsl --install" -ForegroundColor Gray
+    Write-Host "  3. Restart your computer" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "For more information:" -ForegroundColor Yellow
+    Write-Host "  https://learn.microsoft.com/en-us/windows/wsl/install" -ForegroundColor Gray
+    exit 1
+}
+
 # メイン処理
 switch ($Action) {
     "CreateBase" {

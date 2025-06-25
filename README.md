@@ -57,6 +57,17 @@ wsl -d Ubuntu-Minimal-myproject
 
 ## Commands
 
+### Initial Setup / 初回設定
+
+PowerShellの実行ポリシーを設定する必要があります:
+```powershell
+# 現在のセッションのみ許可
+Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+
+# または、現在のユーザーに対して許可（永続的）
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
 ### Base Management
 ```powershell
 # Create base images
