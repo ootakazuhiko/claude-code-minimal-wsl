@@ -745,8 +745,8 @@ echo ""
 
         $script += @"
 
-# $stepNum. Claude Code インストール
-echo "[$stepNum/X] Installing Claude Code..."
+# 9. Claude Code インストール
+echo "[9/X] Installing Claude Code..."
 
 # Claude Code の前提条件
 echo "Installing Node.js for Claude Code..."
@@ -770,12 +770,12 @@ npm install -g @anthropic-ai/claude-code || {
 }
 
 # シンボリックリンクを作成（claude-codeがclaudeとしても使えるように）
-claude_path=\$(command -v claude-code 2>/dev/null || command -v claude 2>/dev/null)
-if [ -n "\$claude_path" ]; then
+claude_path=`$(command -v claude-code 2>/dev/null || command -v claude 2>/dev/null)
+if [ -n "`$claude_path" ]; then
     if [ ! -e /usr/bin/claude ]; then
-        ln -sf "\$claude_path" /usr/bin/claude 2>/dev/null || true
+        ln -sf "`$claude_path" /usr/bin/claude 2>/dev/null || true
     fi
-    echo "Claude Code installed at: \$claude_path"
+    echo "Claude Code installed at: `$claude_path"
     # バージョン確認
     claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "Warning: Could not verify Claude Code version"
 else
@@ -1149,27 +1149,27 @@ fi
 echo ""
 echo "=== Installed Tools Verification ==="
 if command -v podman >/dev/null 2>&1; then
-    echo "✓ Podman: \$(podman --version)"
+    echo "✓ Podman: `$(podman --version)"
 else
     echo "✗ Podman: Not found"
 fi
 
 if command -v gh >/dev/null 2>&1; then
-    echo "✓ GitHub CLI: \$(gh --version | head -1)"
+    echo "✓ GitHub CLI: `$(gh --version | head -1)"
 else
     echo "✗ GitHub CLI: Not found"
 fi
 
 if command -v claude >/dev/null 2>&1 || command -v claude-code >/dev/null 2>&1; then
-    claude_version=\$(claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "version unknown")
-    echo "✓ Claude Code: \$claude_version"
+    claude_version=`$(claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "version unknown")
+    echo "✓ Claude Code: `$claude_version"
 else
     echo "✗ Claude Code: Not found"
 fi
 
 if command -v node >/dev/null 2>&1; then
-    echo "✓ Node.js: \$(node --version)"
-    echo "✓ npm: \$(npm --version)"
+    echo "✓ Node.js: `$(node --version)"
+    echo "✓ npm: `$(npm --version)"
 else
     echo "✗ Node.js: Not found"
 fi
