@@ -873,120 +873,114 @@ if [ -d /home/wsluser/.claude-project-identifier ]; then
 fi
 
 # 環境変数とパスの設定（修正版）
-cat >> /home/wsluser/.bashrc << 'BASHRC_EOF'
-# Claude Code settings
-export PATH=$PATH:$HOME/.local/bin
-
-# Claude Code completion (if available)
-if command -v claude &> /dev/null; then
-    eval "$(claude --completion-script bash 2>/dev/null || true)"
-fi
-
-# Claude Code aliases
-alias cc="claude"
-
-# Claude Project Identifier integration
-if [ -f "$HOME/.claude-project-identifier/init.sh" ]; then
-    source "$HOME/.claude-project-identifier/init.sh"
-fi
-
-# Auto-display project info when entering directories
-cd() {
-    builtin cd "$@"
-    if [ -f ".claude-project" ]; then
-        if command -v claude-project-init &> /dev/null; then
-            claude-project-init
-        fi
-    fi
-}
-BASHRC_EOF
+echo '# Claude Code settings' >> /home/wsluser/.bashrc
+echo 'export PATH=$PATH:$HOME/.local/bin' >> /home/wsluser/.bashrc
+echo '' >> /home/wsluser/.bashrc
+echo '# Claude Code completion (if available)' >> /home/wsluser/.bashrc
+echo 'if command -v claude &> /dev/null; then' >> /home/wsluser/.bashrc
+echo '    eval "$(claude --completion-script bash 2>/dev/null || true)"' >> /home/wsluser/.bashrc
+echo 'fi' >> /home/wsluser/.bashrc
+echo '' >> /home/wsluser/.bashrc
+echo '# Claude Code aliases' >> /home/wsluser/.bashrc
+echo 'alias cc="claude"' >> /home/wsluser/.bashrc
+echo '' >> /home/wsluser/.bashrc
+echo '# Claude Project Identifier integration' >> /home/wsluser/.bashrc
+echo 'if [ -f "$HOME/.claude-project-identifier/init.sh" ]; then' >> /home/wsluser/.bashrc
+echo '    source "$HOME/.claude-project-identifier/init.sh"' >> /home/wsluser/.bashrc
+echo 'fi' >> /home/wsluser/.bashrc
+echo '' >> /home/wsluser/.bashrc
+echo '# Auto-display project info when entering directories' >> /home/wsluser/.bashrc
+echo 'cd() {' >> /home/wsluser/.bashrc
+echo '    builtin cd "$@"' >> /home/wsluser/.bashrc
+echo '    if [ -f ".claude-project" ]; then' >> /home/wsluser/.bashrc
+echo '        if command -v claude-project-init &> /dev/null; then' >> /home/wsluser/.bashrc
+echo '            claude-project-init' >> /home/wsluser/.bashrc
+echo '        fi' >> /home/wsluser/.bashrc
+echo '    fi' >> /home/wsluser/.bashrc
+echo '}' >> /home/wsluser/.bashrc
 
 # 設定ファイルディレクトリの作成
 mkdir -p /home/wsluser/.config/claude-code
 chown -R wsluser:wsluser /home/wsluser/.config/claude-code
 
 # 初期設定ファイル
-cat > /home/wsluser/.config/claude-code/config.yaml << 'CONFIG_EOF'
-# Claude Code Configuration
-# See: https://docs.anthropic.com/ja/docs/claude-code/getting-started
-
-# API設定（キーは後で設定）
-api:
-  # key: "your-api-key-here"
-  
-# プロジェクト設定
-project:
-  # プロジェクトルートの自動検出
-  auto_detect_root: true
-  
-  # プロジェクト固有の設定ファイル
-  config_files:
-    - ".claude-project"
-    - "CLAUDE.md"
-    
-# UI設定
-ui:
-  # ターミナルのカラー出力
-  color: true
-  
-  # プログレス表示
-  progress: true
-  
-# その他設定
-misc:
-  # 一時ファイルの自動削除
-  auto_cleanup: true
-CONFIG_EOF
+echo '# Claude Code Configuration' > /home/wsluser/.config/claude-code/config.yaml
+echo '# See: https://docs.anthropic.com/ja/docs/claude-code/getting-started' >> /home/wsluser/.config/claude-code/config.yaml
+echo '' >> /home/wsluser/.config/claude-code/config.yaml
+echo '# API設定（キーは後で設定）' >> /home/wsluser/.config/claude-code/config.yaml
+echo 'api:' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  # key: "your-api-key-here"' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  ' >> /home/wsluser/.config/claude-code/config.yaml
+echo '# プロジェクト設定' >> /home/wsluser/.config/claude-code/config.yaml
+echo 'project:' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  # プロジェクトルートの自動検出' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  auto_detect_root: true' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  ' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  # プロジェクト固有の設定ファイル' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  config_files:' >> /home/wsluser/.config/claude-code/config.yaml
+echo '    - ".claude-project"' >> /home/wsluser/.config/claude-code/config.yaml
+echo '    - "CLAUDE.md"' >> /home/wsluser/.config/claude-code/config.yaml
+echo '    ' >> /home/wsluser/.config/claude-code/config.yaml
+echo '# UI設定' >> /home/wsluser/.config/claude-code/config.yaml
+echo 'ui:' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  # ターミナルのカラー出力' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  color: true' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  ' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  # プログレス表示' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  progress: true' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  ' >> /home/wsluser/.config/claude-code/config.yaml
+echo '# その他設定' >> /home/wsluser/.config/claude-code/config.yaml
+echo 'misc:' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  # 一時ファイルの自動削除' >> /home/wsluser/.config/claude-code/config.yaml
+echo '  auto_cleanup: true' >> /home/wsluser/.config/claude-code/config.yaml
 
 chown wsluser:wsluser /home/wsluser/.config/claude-code/config.yaml
 
 # APIキー設定の案内
 mkdir -p /opt/claude-code
-cat > /opt/claude-code/setup-claude-code.sh << 'SETUP_EOF'
-#!/bin/bash
-# Claude Code セットアップヘルパー
-
-echo "======================================"
-echo " Claude Code Setup Helper"
-echo "======================================"
-echo ""
-echo "Claude Code has been installed."
-echo ""
-echo "To complete setup:"
-echo ""
-echo "1. Get your API key from: https://console.anthropic.com/"
-echo ""
-echo "2. Set your API key using one of these methods:"
-echo "   a) Environment variable:"
-echo "      export ANTHROPIC_API_KEY='your-api-key'"
-echo "      echo 'export ANTHROPIC_API_KEY=\"your-api-key\"' >> ~/.bashrc"
-echo ""
-echo "   b) Claude CLI config:"
-echo "      claude auth login"
-echo ""
-echo "   c) Config file:"
-echo "      Edit ~/.config/claude/config.yaml"
-echo ""
-echo "3. Verify installation:"
-echo "   claude --version"
-echo "   claude --help"
-echo ""
-echo "4. Quick test:"
-echo "   echo 'Hello, Claude!' | claude"
-echo ""
-echo "5. Claude Project Identifier setup:"
-echo "   # Create a new project"
-echo "   mkdir my-project && cd my-project"
-echo "   claude-project-init"
-echo ""
-echo "   # This will create .claude-project and CLAUDE.md files"
-echo "   # and show project info in terminal title"
-echo ""
-echo "For more information:"
-echo "https://docs.anthropic.com/ja/docs/claude-code/getting-started"
-echo "https://github.com/ootakazuhiko/claude-project-identifier"
-echo ""
-SETUP_EOF
+echo '#!/bin/bash' > /opt/claude-code/setup-claude-code.sh
+echo '# Claude Code セットアップヘルパー' >> /opt/claude-code/setup-claude-code.sh
+echo '' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "======================================"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo " Claude Code Setup Helper"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "======================================"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "Claude Code has been installed."' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "To complete setup:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "1. Get your API key from: https://console.anthropic.com/"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "2. Set your API key using one of these methods:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   a) Environment variable:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "      export ANTHROPIC_API_KEY='\''your-api-key'\''"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "      echo '\''export ANTHROPIC_API_KEY=\"your-api-key\"'\'' >> ~/.bashrc"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   b) Claude CLI config:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "      claude auth login"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   c) Config file:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "      Edit ~/.config/claude/config.yaml"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "3. Verify installation:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   claude --version"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   claude --help"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "4. Quick test:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   echo '\''Hello, Claude!'\'' | claude"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "5. Claude Project Identifier setup:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   # Create a new project"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   mkdir my-project && cd my-project"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   claude-project-init"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   # This will create .claude-project and CLAUDE.md files"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "   # and show project info in terminal title"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "For more information:"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "https://docs.anthropic.com/ja/docs/claude-code/getting-started"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo "https://github.com/ootakazuhiko/claude-project-identifier"' >> /opt/claude-code/setup-claude-code.sh
+echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
 
 chmod +x /opt/claude-code/setup-claude-code.sh
 chown wsluser:wsluser /opt/claude-code/setup-claude-code.sh
