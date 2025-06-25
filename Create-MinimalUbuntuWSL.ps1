@@ -31,13 +31,14 @@ param(
     [switch]$DebugMode = $false,
     
     [Parameter(Mandatory=$false)]
-    [switch]$Verbose = $false,
+    [switch]$ShowOutput = $false,
     
     [Parameter(Mandatory=$false)]
     [string]$LogFile = ""
 )
 
-$ErrorActionPreference = "Stop"
+# エラー処理を調整：重要でないエラーではスクリプトを停止しない
+$ErrorActionPreference = "Continue"
 
 # カラー出力
 function Write-ColorOutput($Color, $Text) {
@@ -115,7 +116,7 @@ function Show-Info {
     Write-Host "  -IncludeClaudeCode Include Claude Code + Project Identifier"
     Write-Host "  -IncludeDevTools   Include all development tools (Podman + gh + Claude Code)"
     Write-Host "  -DebugMode         Enable full debug output during script execution"
-    Write-Host "  -Verbose           Show detailed output (less than DebugMode)"
+    Write-Host "  -ShowOutput        Show detailed output (less than DebugMode)"
     Write-Host "  -LogFile           Save debug output to specified file"
     Write-Host ""
     Write-ColorOutput Yellow "Diagnostic Tools:"
@@ -1725,7 +1726,7 @@ function New-MinimalBaseImage {
                     }
                 }
                 
-                if ($DebugMode -or $Verbose) {
+                if ($DebugMode -or $ShowOutput) {
                     Write-Host "      Full script output:" -ForegroundColor Gray
                     Write-Host $scriptOutput -ForegroundColor DarkGray
                 }
@@ -2221,24 +2222,62 @@ if (-not (Test-WSLInstalled)) {
 try {
     switch ($Action) {
         "CreateBase" {
-            New-MinimalBaseImage
+            try {
+                New-MinimalBaseImage
+            } catch {
+                Write-Host ""
+                Write-ColorOutput Red "Error in CreateBase action: $_"
+                Write-Host "Stack trace:" -ForegroundColor Yellow
+                Write-Host $_.ScriptStackTrace -ForegroundColor Gray
+            }
         }
         "NewInstance" {
-            New-MinimalInstance -Name $InstanceName
+            try {
+                New-MinimalInstance -Name $InstanceName
+            } catch {
+                Write-Host ""
+                Write-ColorOutput Red "Error in NewInstance action: $_"
+                Write-Host "Stack trace:" -ForegroundColor Yellow
+                Write-Host $_.ScriptStackTrace -ForegroundColor Gray
+            }
         }
         "ListImages" {
-            Show-ImageList
+            try {
+                Show-ImageList
+            } catch {
+                Write-Host ""
+                Write-ColorOutput Red "Error in ListImages action: $_"
+                Write-Host "Stack trace:" -ForegroundColor Yellow
+                Write-Host $_.ScriptStackTrace -ForegroundColor Gray
+            }
         }
         "Info" {
-            Show-Info
+            try {
+                Show-Info
+            } catch {
+                Write-Host ""
+                Write-ColorOutput Red "Error in Info action: $_"
+                Write-Host "Stack trace:" -ForegroundColor Yellow
+                Write-Host $_.ScriptStackTrace -ForegroundColor Gray
+            }
         }
         default {
-            Show-Info
+            try {
+                Show-Info
+            } catch {
+                Write-Host ""
+                Write-ColorOutput Red "Error in default action: $_"
+                Write-Host "Stack trace:" -ForegroundColor Yellow
+                Write-Host $_.ScriptStackTrace -ForegroundColor Gray
+            }
         }
     }
 } catch {
     Write-Host ""
-    Write-ColorOutput Red "An unexpected error occurred: $_"
+    Write-ColorOutput Red "An unexpected error occurred in main processing: $_"
+    Write-Host ""
+    Write-Host "Stack trace:" -ForegroundColor Yellow
+    Write-Host $_.ScriptStackTrace -ForegroundColor Gray
     Write-Host ""
     Write-Host "If this error persists, please check:" -ForegroundColor Yellow
     Write-Host "  1. WSL is properly installed and running" -ForegroundColor Gray
@@ -2248,3 +2287,7 @@ try {
     Write-Host "For troubleshooting, see:" -ForegroundColor Yellow
     Write-Host "  https://github.com/ootakazuhiko/claude-code-minimal-wsl/blob/main/TROUBLESHOOTING.md" -ForegroundColor Gray
 }
+
+# スクリプトの最後に明示的な正常終了を追加
+Write-Host ""
+Write-Host "Script execution completed." -ForegroundColor Green
