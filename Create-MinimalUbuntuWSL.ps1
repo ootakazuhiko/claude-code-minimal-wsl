@@ -1992,6 +1992,17 @@ function New-MinimalInstance {
         # サイズ情報
         $imageSize = [math]::Round((Get-Item $imagePath).Length / 1MB, 2)
         Write-Host "Base image size: ${imageSize}MB"
+        
+        # 開発ツールの設定を促す
+        Write-Host ""
+        Write-ColorOutput Yellow "Next step: Configure developer tools"
+        Write-Host "Run the following to set up git, gh, and claude authentication:"
+        Write-ColorOutput Gray "  .\Setup-DevTools.ps1 -InstanceName $distroName"
+        Write-Host ""
+        Write-Host "Or configure manually inside WSL:"
+        Write-Host "  Git: git config --global user.name 'Your Name'" -ForegroundColor Gray
+        Write-Host "  GitHub: gh auth login" -ForegroundColor Gray
+        Write-Host "  Claude: export ANTHROPIC_API_KEY='your-key'" -ForegroundColor Gray
     }
 }
 

@@ -1,0 +1,13 @@
+{
+  "git": {
+    "userName": "Your Name",
+    "userEmail": "your.email@example.com"
+  },
+  "github": {
+    "token": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "claude": {
+    "apiKey": "sk-ant-api03-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "useWindowsCredentials": true
+}

@@ -41,3 +41,6 @@ dist/
 secrets/
 .env
 config.local.*
+devtools-config.json
+*.secret.json
+*.secret
