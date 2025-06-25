@@ -782,108 +782,6 @@ rm -rf /var/lib/apt/lists/*
     
     # Claude Code インストール
     if ($WithClaudeCode) {
-        # 修正: here-stringのエスケープ問題を解決
-        $bashrcContent = @'
-# Claude Code settings
-export PATH=$PATH:$HOME/.local/bin
-
-# Claude Code completion (if available)
-if command -v claude &> /dev/null; then
-    eval "$(claude --completion-script bash 2>/dev/null || true)"
-fi
-
-# Claude Code aliases
-alias cc="claude"
-
-# Claude Project Identifier integration
-if [ -f "$HOME/.claude-project-identifier/init.sh" ]; then
-    source "$HOME/.claude-project-identifier/init.sh"
-fi
-
-# Auto-display project info when entering directories
-cd() {
-    builtin cd "$@"
-    if [ -f ".claude-project" ]; then
-        if command -v claude-project-init &> /dev/null; then
-            claude-project-init
-        fi
-    fi
-}
-'@
-
-        $configContent = @'
-# Claude Code Configuration
-# See: https://docs.anthropic.com/ja/docs/claude-code/getting-started
-
-# API設定（キーは後で設定）
-api:
-  # key: "your-api-key-here"
-  # endpoint: "https://api.anthropic.com"
-
-# デフォルト設定
-defaults:
-  model: "claude-3-opus-20240229"
-  max_tokens: 4096
-  temperature: 0.7
-
-# エディタ統合
-editor:
-  command: "vim"
-  
-# プロジェクト設定
-project:
-  ignore_patterns:
-    - "*.pyc"
-    - "__pycache__"
-    - ".git"
-    - "node_modules"
-'@
-
-        $setupHelperContent = @'
-#!/bin/bash
-# Claude Code セットアップヘルパー
-
-echo "======================================"
-echo " Claude Code Setup Helper"
-echo "======================================"
-echo ""
-echo "Claude Code has been installed."
-echo ""
-echo "To complete setup:"
-echo ""
-echo "1. Get your API key from: https://console.anthropic.com/"
-echo ""
-echo "2. Set your API key using one of these methods:"
-echo "   a) Environment variable:"
-echo "      export ANTHROPIC_API_KEY='your-api-key'"
-echo "      echo 'export ANTHROPIC_API_KEY=\"your-api-key\"' >> ~/.bashrc"
-echo ""
-echo "   b) Claude CLI config:"
-echo "      claude auth login"
-echo ""
-echo "   c) Config file:"
-echo "      Edit ~/.config/claude/config.yaml"
-echo ""
-echo "3. Verify installation:"
-echo "   claude --version"
-echo "   claude --help"
-echo ""
-echo "4. Quick test:"
-echo "   echo 'Hello, Claude!' | claude"
-echo ""
-echo "5. Claude Project Identifier setup:"
-echo "   # Create a new project"
-echo "   mkdir my-project && cd my-project"
-echo "   claude-project-init"
-echo ""
-echo "   # This will create .claude-project and CLAUDE.md files"
-echo "   # and show project info in terminal title"
-echo ""
-echo "For more information:"
-echo "https://docs.anthropic.com/ja/docs/claude-code/getting-started"
-echo "https://github.com/ootakazuhiko/claude-project-identifier"
-echo ""
-'@
 
         $script += @"
 
@@ -964,20 +862,43 @@ else
         }
     }
 fi
-    
-    # Create command symlink
+
+# Create command symlink if installation succeeded
+if [ -d /home/wsluser/.claude-project-identifier ]; then
     mkdir -p /home/wsluser/.local/bin
     ln -sf /home/wsluser/.claude-project-identifier/init.sh /home/wsluser/.local/bin/claude-project-init 2>/dev/null || true
     
-    chown -R wsluser:wsluser /home/wsluser/.claude-project-identifier
-    chown -R wsluser:wsluser /home/wsluser/.local/bin
-    
-    echo "Claude Project Identifier installed manually"
-}
+    chown -R wsluser:wsluser /home/wsluser/.claude-project-identifier 2>/dev/null || true
+    chown -R wsluser:wsluser /home/wsluser/.local/bin 2>/dev/null || true
+fi
 
 # 環境変数とパスの設定（修正版）
 cat >> /home/wsluser/.bashrc << 'BASHRC_EOF'
-$bashrcContent
+# Claude Code settings
+export PATH=$PATH:$HOME/.local/bin
+
+# Claude Code completion (if available)
+if command -v claude &> /dev/null; then
+    eval "$(claude --completion-script bash 2>/dev/null || true)"
+fi
+
+# Claude Code aliases
+alias cc="claude"
+
+# Claude Project Identifier integration
+if [ -f "$HOME/.claude-project-identifier/init.sh" ]; then
+    source "$HOME/.claude-project-identifier/init.sh"
+fi
+
+# Auto-display project info when entering directories
+cd() {
+    builtin cd "$@"
+    if [ -f ".claude-project" ]; then
+        if command -v claude-project-init &> /dev/null; then
+            claude-project-init
+        fi
+    fi
+}
 BASHRC_EOF
 
 # 設定ファイルディレクトリの作成
@@ -986,14 +907,85 @@ chown -R wsluser:wsluser /home/wsluser/.config/claude-code
 
 # 初期設定ファイル
 cat > /home/wsluser/.config/claude-code/config.yaml << 'CONFIG_EOF'
-$configContent
+# Claude Code Configuration
+# See: https://docs.anthropic.com/ja/docs/claude-code/getting-started
+
+# API設定（キーは後で設定）
+api:
+  # key: "your-api-key-here"
+  
+# プロジェクト設定
+project:
+  # プロジェクトルートの自動検出
+  auto_detect_root: true
+  
+  # プロジェクト固有の設定ファイル
+  config_files:
+    - ".claude-project"
+    - "CLAUDE.md"
+    
+# UI設定
+ui:
+  # ターミナルのカラー出力
+  color: true
+  
+  # プログレス表示
+  progress: true
+  
+# その他設定
+misc:
+  # 一時ファイルの自動削除
+  auto_cleanup: true
 CONFIG_EOF
 
 chown wsluser:wsluser /home/wsluser/.config/claude-code/config.yaml
 
 # APIキー設定の案内
+mkdir -p /opt/claude-code
 cat > /opt/claude-code/setup-claude-code.sh << 'SETUP_EOF'
-$setupHelperContent
+#!/bin/bash
+# Claude Code セットアップヘルパー
+
+echo "======================================"
+echo " Claude Code Setup Helper"
+echo "======================================"
+echo ""
+echo "Claude Code has been installed."
+echo ""
+echo "To complete setup:"
+echo ""
+echo "1. Get your API key from: https://console.anthropic.com/"
+echo ""
+echo "2. Set your API key using one of these methods:"
+echo "   a) Environment variable:"
+echo "      export ANTHROPIC_API_KEY='your-api-key'"
+echo "      echo 'export ANTHROPIC_API_KEY=\"your-api-key\"' >> ~/.bashrc"
+echo ""
+echo "   b) Claude CLI config:"
+echo "      claude auth login"
+echo ""
+echo "   c) Config file:"
+echo "      Edit ~/.config/claude/config.yaml"
+echo ""
+echo "3. Verify installation:"
+echo "   claude --version"
+echo "   claude --help"
+echo ""
+echo "4. Quick test:"
+echo "   echo 'Hello, Claude!' | claude"
+echo ""
+echo "5. Claude Project Identifier setup:"
+echo "   # Create a new project"
+echo "   mkdir my-project && cd my-project"
+echo "   claude-project-init"
+echo ""
+echo "   # This will create .claude-project and CLAUDE.md files"
+echo "   # and show project info in terminal title"
+echo ""
+echo "For more information:"
+echo "https://docs.anthropic.com/ja/docs/claude-code/getting-started"
+echo "https://github.com/ootakazuhiko/claude-project-identifier"
+echo ""
 SETUP_EOF
 
 chmod +x /opt/claude-code/setup-claude-code.sh
