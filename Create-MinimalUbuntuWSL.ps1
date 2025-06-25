@@ -1373,9 +1373,14 @@ function New-MinimalBaseImage {
         } | Where-Object { $_ -ne '' }
         
         $hasUbuntu2204 = $false
+        $ubuntu2204Name = ""
         foreach ($distro in $existingDistros) {
-            if ($distro -eq "Ubuntu-22.04") {
+            # Ubuntu-22.04、Ubuntu 22.04 LTS、その他の形式をチェック
+            if ($distro -eq "Ubuntu-22.04" -or 
+                $distro -eq "Ubuntu 22.04 LTS" -or 
+                $distro -like "Ubuntu*22.04*") {
                 $hasUbuntu2204 = $true
+                $ubuntu2204Name = $distro
                 break
             }
         }
@@ -1418,9 +1423,19 @@ function New-MinimalBaseImage {
                                 $_.Trim() -replace '\0', '' -replace '[^\x20-\x7E]', ''
                             } | Where-Object { $_ -ne '' }
                             
-                            if ($currentDistros -contains "Ubuntu-22.04") {
-                                Write-Host "      Ubuntu-22.04 installation confirmed!" -ForegroundColor Green
-                                $installSuccess = $true
+                            # 複数の可能な名前をチェック
+                            foreach ($distro in $currentDistros) {
+                                if ($distro -eq "Ubuntu-22.04" -or 
+                                    $distro -eq "Ubuntu 22.04 LTS" -or 
+                                    $distro -like "Ubuntu*22.04*") {
+                                    Write-Host "      Ubuntu 22.04 installation confirmed as: $distro" -ForegroundColor Green
+                                    $installSuccess = $true
+                                    $ubuntu2204Name = $distro
+                                    break
+                                }
+                            }
+                            
+                            if ($installSuccess) {
                                 break
                             }
                             
@@ -1435,10 +1450,22 @@ function New-MinimalBaseImage {
                                 $_.Trim() -replace '\0', '' -replace '[^\x20-\x7E]', ''
                             } | Where-Object { $_ -ne '' }
                             
-                            if ($currentDistros -contains "Ubuntu-22.04") {
-                                $installSuccess = $true
-                            } else {
-                                throw "Ubuntu-22.04 was not found after installation timeout"
+                            # 再度、複数の可能な名前をチェック
+                            foreach ($distro in $currentDistros) {
+                                if ($distro -eq "Ubuntu-22.04" -or 
+                                    $distro -eq "Ubuntu 22.04 LTS" -or 
+                                    $distro -like "Ubuntu*22.04*") {
+                                    $installSuccess = $true
+                                    $ubuntu2204Name = $distro
+                                    Write-Host "      Found Ubuntu 22.04 as: $distro" -ForegroundColor Green
+                                    break
+                                }
+                            }
+                            
+                            if (-not $installSuccess) {
+                                Write-Host "      Installed distributions:" -ForegroundColor Yellow
+                                $currentDistros | ForEach-Object { Write-Host "        - $_" -ForegroundColor Gray }
+                                throw "Ubuntu 22.04 was not found after installation timeout"
                             }
                         }
                     } else {
@@ -1488,13 +1515,28 @@ function New-MinimalBaseImage {
         
         # 最終確認（デフォルトUbuntuフォールバックを考慮）
         if (-not $global:UseDefaultUbuntu) {
-            $finalCheck = wsl --list --quiet 2>$null | ForEach-Object { 
-                $_.Trim() -replace '\0', '' -replace '[^\x20-\x7E]', ''
-            } | Where-Object { $_ -ne '' }
-            
-            if ($finalCheck -notcontains "Ubuntu-22.04") {
-                Write-ColorOutput Red "Error: Ubuntu-22.04 is not available"
-                return
+            # 実際に見つかった名前を使用
+            if ([string]::IsNullOrEmpty($ubuntu2204Name)) {
+                # もう一度確認
+                $finalCheck = wsl --list --quiet 2>$null | ForEach-Object { 
+                    $_.Trim() -replace '\0', '' -replace '[^\x20-\x7E]', ''
+                } | Where-Object { $_ -ne '' }
+                
+                foreach ($distro in $finalCheck) {
+                    if ($distro -eq "Ubuntu-22.04" -or 
+                        $distro -eq "Ubuntu 22.04 LTS" -or 
+                        $distro -like "Ubuntu*22.04*") {
+                        $ubuntu2204Name = $distro
+                        break
+                    }
+                }
+                
+                if ([string]::IsNullOrEmpty($ubuntu2204Name)) {
+                    Write-ColorOutput Red "Error: Ubuntu 22.04 is not available"
+                    Write-Host "Available distributions:" -ForegroundColor Yellow
+                    $finalCheck | ForEach-Object { Write-Host "  - $_" -ForegroundColor Gray }
+                    return
+                }
             }
         }
         
@@ -1502,7 +1544,7 @@ function New-MinimalBaseImage {
         Write-Host "[2/5] Creating temporary instance..." -ForegroundColor White
         
         # 使用するベースディストリビューション名を決定
-        $baseDistro = if ($global:UseDefaultUbuntu) { "Ubuntu" } else { "Ubuntu-22.04" }
+        $baseDistro = if ($global:UseDefaultUbuntu) { "Ubuntu" } else { $ubuntu2204Name }
         
         try {
             Write-Host "      Exporting $baseDistro as base..." -ForegroundColor Gray
