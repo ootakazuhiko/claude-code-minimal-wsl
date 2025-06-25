@@ -1375,10 +1375,11 @@ function New-MinimalBaseImage {
         $hasUbuntu2204 = $false
         $ubuntu2204Name = ""
         foreach ($distro in $existingDistros) {
-            # Ubuntu-22.04、Ubuntu 22.04 LTS、その他の形式をチェック
+            # Ubuntu-22.04、Ubuntu 22.04 LTS、Ubuntu（デフォルト）、その他の形式をチェック
             if ($distro -eq "Ubuntu-22.04" -or 
                 $distro -eq "Ubuntu 22.04 LTS" -or 
-                $distro -like "Ubuntu*22.04*") {
+                $distro -like "Ubuntu*22.04*" -or
+                $distro -eq "Ubuntu") {  # デフォルトのUbuntuも22.04の可能性
                 $hasUbuntu2204 = $true
                 $ubuntu2204Name = $distro
                 break
@@ -1423,12 +1424,13 @@ function New-MinimalBaseImage {
                                 $_.Trim() -replace '\0', '' -replace '[^\x20-\x7E]', ''
                             } | Where-Object { $_ -ne '' }
                             
-                            # 複数の可能な名前をチェック
+                            # 複数の可能な名前をチェック（Ubuntuも含む）
                             foreach ($distro in $currentDistros) {
                                 if ($distro -eq "Ubuntu-22.04" -or 
                                     $distro -eq "Ubuntu 22.04 LTS" -or 
-                                    $distro -like "Ubuntu*22.04*") {
-                                    Write-Host "      Ubuntu 22.04 installation confirmed as: $distro" -ForegroundColor Green
+                                    $distro -like "Ubuntu*22.04*" -or
+                                    $distro -eq "Ubuntu") {
+                                    Write-Host "      Ubuntu installation confirmed as: $distro" -ForegroundColor Green
                                     $installSuccess = $true
                                     $ubuntu2204Name = $distro
                                     break
@@ -1450,14 +1452,15 @@ function New-MinimalBaseImage {
                                 $_.Trim() -replace '\0', '' -replace '[^\x20-\x7E]', ''
                             } | Where-Object { $_ -ne '' }
                             
-                            # 再度、複数の可能な名前をチェック
+                            # 再度、複数の可能な名前をチェック（Ubuntuも含む）
                             foreach ($distro in $currentDistros) {
                                 if ($distro -eq "Ubuntu-22.04" -or 
                                     $distro -eq "Ubuntu 22.04 LTS" -or 
-                                    $distro -like "Ubuntu*22.04*") {
+                                    $distro -like "Ubuntu*22.04*" -or
+                                    $distro -eq "Ubuntu") {
                                     $installSuccess = $true
                                     $ubuntu2204Name = $distro
-                                    Write-Host "      Found Ubuntu 22.04 as: $distro" -ForegroundColor Green
+                                    Write-Host "      Found Ubuntu as: $distro" -ForegroundColor Green
                                     break
                                 }
                             }
@@ -1465,7 +1468,9 @@ function New-MinimalBaseImage {
                             if (-not $installSuccess) {
                                 Write-Host "      Installed distributions:" -ForegroundColor Yellow
                                 $currentDistros | ForEach-Object { Write-Host "        - $_" -ForegroundColor Gray }
-                                throw "Ubuntu 22.04 was not found after installation timeout"
+                                Write-Host ""
+                                Write-Host "      Expected one of: Ubuntu-22.04, Ubuntu 22.04 LTS, or Ubuntu" -ForegroundColor Yellow
+                                throw "No suitable Ubuntu distribution found after installation timeout"
                             }
                         }
                     } else {
@@ -1525,16 +1530,19 @@ function New-MinimalBaseImage {
                 foreach ($distro in $finalCheck) {
                     if ($distro -eq "Ubuntu-22.04" -or 
                         $distro -eq "Ubuntu 22.04 LTS" -or 
-                        $distro -like "Ubuntu*22.04*") {
+                        $distro -like "Ubuntu*22.04*" -or
+                        $distro -eq "Ubuntu") {  # デフォルトのUbuntuも22.04の可能性
                         $ubuntu2204Name = $distro
                         break
                     }
                 }
                 
                 if ([string]::IsNullOrEmpty($ubuntu2204Name)) {
-                    Write-ColorOutput Red "Error: Ubuntu 22.04 is not available"
+                    Write-ColorOutput Red "Error: No suitable Ubuntu distribution found"
                     Write-Host "Available distributions:" -ForegroundColor Yellow
                     $finalCheck | ForEach-Object { Write-Host "  - $_" -ForegroundColor Gray }
+                    Write-Host ""
+                    Write-Host "Expected one of: Ubuntu-22.04, Ubuntu 22.04 LTS, or Ubuntu" -ForegroundColor Yellow
                     return
                 }
             }

@@ -158,7 +158,9 @@ powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Acti
    ```
 
 2. **Ubuntu-22.04 not available**
-   - Install from Microsoft Store manually
+   - WSL may install Ubuntu with different names: "Ubuntu", "Ubuntu-22.04", or "Ubuntu 22.04 LTS"
+   - The script now supports all these naming variations
+   - If still not found, install from Microsoft Store manually
    - Use diagnostic script: `.\Check-WSLDistributions.ps1`
 
 3. **Permission issues**
@@ -340,7 +342,9 @@ powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Acti
    ```
 
 2. **Ubuntu-22.04が利用できない**
-   - Microsoft Storeから手動でインストール
+   - WSLはUbuntuを異なる名前でインストールする場合があります: "Ubuntu"、"Ubuntu-22.04"、または"Ubuntu 22.04 LTS"
+   - スクリプトはこれらの名前のバリエーションをすべてサポートしています
+   - それでも見つからない場合は、Microsoft Storeから手動でインストール
    - 診断スクリプトを使用: `.\Check-WSLDistributions.ps1`
 
 3. **権限の問題**
