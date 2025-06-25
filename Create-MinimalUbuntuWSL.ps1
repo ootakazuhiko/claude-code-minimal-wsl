@@ -171,21 +171,36 @@ function Get-MinimalSetupScript {
     $script = @'
 #!/bin/bash
 # Minimal Ubuntu Setup Script
-# Don't exit on errors - we'll handle them individually
-# set -e  # Commented out to prevent early exit
+# Enhanced error handling and debugging
 
 echo "================================================="
 echo " Starting Ubuntu Minimization"
 echo "================================================="
 echo ""
+echo "Script started at: $(date)"
+echo "Running as user: $(whoami)"
+echo "Working directory: $(pwd)"
+echo ""
 
-# デバッグ用のエラーハンドラ
+# エラーハンドラの改善
 error_handler() {
     local exit_code=$?
     local line_no=${1:-$LINENO}
-    echo "Warning: Command failed at line $line_no with exit code $exit_code"
-    # Continue execution
+    echo "ERROR: Command failed at line $line_no with exit code $exit_code"
+    echo "  Last command: $BASH_COMMAND"
+    echo "  Continuing execution..."
+    return 0
 }
+
+# トラップを設定（ただし、スクリプト全体は停止しない）
+trap 'error_handler $LINENO' ERR
+
+# デバッグ情報の表示
+debug_info() {
+    echo "DEBUG: $1"
+}
+
+debug_info "Error handler and trap configured"
 
 # 環境変数設定
 export DEBIAN_FRONTEND=noninteractive
@@ -358,15 +373,14 @@ find /var/log -type f -exec truncate -s 0 {} \;
 # 6. システム設定の最適化
 echo "[6/8] Optimizing system configuration..."
 
-# WSL設定 - resolv.conf の自動生成を完全に無効化
+# WSL設定 - systemd-resolved とWSLの協調動作を設定
 cat > /etc/wsl.conf << 'EOF'
 [boot]
 systemd=true
-command="/usr/local/bin/wsl-init-fix.sh"
 
 [network]
 generateHosts=true
-generateResolvConf=false
+generateResolvConf=true
 
 [automount]
 enabled=true
@@ -377,19 +391,20 @@ enabled=true
 appendWindowsPath=true
 EOF
 
-# wsl.conf が確実に読み込まれるようにする
-
-# DNS設定 - WSLが自動生成するresolv.confにフォールバック設定を追加
-cat > /etc/resolv.conf << 'EOF'
-# This file will be overwritten by WSL, but provides fallback DNS
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-nameserver 1.1.1.1
-nameserver 1.0.0.1
+# systemd-resolved設定を最適化
+mkdir -p /etc/systemd/resolved.conf.d/
+cat > /etc/systemd/resolved.conf.d/wsl.conf << 'EOF'
+[Resolve]
+DNS=8.8.8.8 8.8.4.4 1.1.1.1
+FallbackDNS=208.67.222.222 208.67.220.220
+DNSSEC=no
+Cache=yes
+DNSStubListener=yes
 EOF
 
-# resolv.confの書き込み保護を解除（WSLが更新できるように）
-chattr -i /etc/resolv.conf 2>/dev/null || true
+# systemd-resolved を有効化し起動
+systemctl unmask systemd-resolved 2>/dev/null || true
+systemctl enable systemd-resolved 2>/dev/null || true
 
 # 不要なサービスの無効化
 # systemd-resolved は DNS解決に必要なので無効化しない
@@ -408,7 +423,7 @@ for service in "${DISABLE_SERVICES[@]}"; do
     systemctl mask $service 2>/dev/null || true
 done
 
-# systemd-resolved が有効であることを確認
+# systemd-resolved が確実に有効であることを再確認
 systemctl unmask systemd-resolved 2>/dev/null || true
 systemctl enable systemd-resolved 2>/dev/null || true
 
@@ -434,20 +449,29 @@ rm -f /etc/cron.daily/*
 rm -f /etc/cron.weekly/*
 rm -f /etc/cron.monthly/*
 
-# MOTD完全無効化 - より包括的なアプローチ
+# MOTD完全無効化 - より確実なアプローチ
 echo "Completely disabling MOTD and login messages..."
 
-# update-motd.d を削除し、その場所にダミーファイルを作成して再作成を防ぐ
-rm -rf /etc/update-motd.d
-touch /etc/update-motd.d
-chmod 000 /etc/update-motd.d
+# update-motd.d のスクリプトを無効化（削除ではなく実行権限を剥奪）
+if [ -d /etc/update-motd.d ]; then
+    chmod -x /etc/update-motd.d/* 2>/dev/null || true
+    # 特に問題のあるスクリプトを個別に無効化
+    chmod -x /etc/update-motd.d/10-help-text 2>/dev/null || true
+    chmod -x /etc/update-motd.d/50-motd-news 2>/dev/null || true
+    chmod -x /etc/update-motd.d/91-* 2>/dev/null || true
+    chmod -x /etc/update-motd.d/99-* 2>/dev/null || true
+fi
 
-# MOTDファイルを削除し空にする
-rm -f /etc/motd
-rm -f /etc/motd.dynamic
-rm -f /run/motd.dynamic
-touch /etc/motd
-chmod 444 /etc/motd
+# MOTDファイルを空にする
+echo "" > /etc/motd
+echo "" > /etc/issue
+echo "" > /etc/issue.net
+
+# ランタイムのMOTDファイルも無効化
+rm -f /run/motd.dynamic 2>/dev/null || true
+mkdir -p /run
+touch /run/motd.dynamic
+chmod 444 /run/motd.dynamic
 
 # Ubuntu Pro と landscape 関連の完全削除
 echo "Removing Ubuntu Pro and landscape messages..."
@@ -483,45 +507,33 @@ fi
 # 7. WSL起動時の問題を修正するための設定
 echo "[7/8] Setting up WSL startup fixes..."
 
-# より単純なアプローチ: bashrcに直接追加
-cat >> /etc/bash.bashrc << 'BASHRCFIX'
+# systemd-resolved が正しく動作するようにnsswitchを設定
+if [ -f /etc/nsswitch.conf ]; then
+    # hostsラインを修正してsystemd-resolved経由で名前解決するように設定
+    sed -i 's/^hosts:.*/hosts: files resolve [!UNAVAIL=return] dns myhostname/' /etc/nsswitch.conf
+else
+    # nsswitch.confを作成
+    cat > /etc/nsswitch.conf << 'NSSEOF'
+passwd:         files
+group:          files
+shadow:         files
+gshadow:        files
 
-# WSL DNS Fix
-if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
-    if [ "$EUID" -eq 0 ]; then
-        rm -f /etc/resolv.conf
-        echo "nameserver 8.8.8.8" > /etc/resolv.conf
-        echo "nameserver 8.8.4.4" >> /etc/resolv.conf
-        echo "nameserver 1.1.1.1" >> /etc/resolv.conf
-    fi
+hosts:          files resolve [!UNAVAIL=return] dns myhostname
+networks:       files
+
+protocols:      db files
+services:       db files
+ethers:         db files
+rpc:            db files
+
+netgroup:       nis
+NSSEOF
 fi
-BASHRCFIX
 
-# root用の.bashrcにも追加
-cat >> /root/.bashrc << 'ROOTBASHRC'
-
-# WSL DNS Fix for root
-if [ -L /etc/resolv.conf ] && [ "$(readlink /etc/resolv.conf)" = "/mnt/wsl/resolv.conf" ]; then
-    rm -f /etc/resolv.conf
-    echo "nameserver 8.8.8.8" > /etc/resolv.conf
-    echo "nameserver 8.8.4.4" >> /etc/resolv.conf
-    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
-fi
-ROOTBASHRC
-
-# resolv.confを事前に正しく設定
+# /etc/resolv.confのリンクを正しく設定（systemd-resolved用）
 rm -f /etc/resolv.conf
-cat > /etc/resolv.conf << 'DNSEOF'
-nameserver 8.8.8.8
-nameserver 8.8.4.4
-nameserver 1.1.1.1
-nameserver 1.0.0.1
-DNSEOF
-
-# resolv.confの自動生成を防ぐためのダミーファイル作成
-mkdir -p /run/resolvconf
-touch /run/resolvconf/resolv.conf
-ln -sf /etc/resolv.conf /run/resolvconf/resolv.conf
+ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 
 # 8. ユーザー設定
 echo "[8/8] Setting up user..."
@@ -534,19 +546,41 @@ echo "Setting up complete login message suppression..."
 # すべてのユーザーに対して .hushlogin を設定
 echo "Creating .hushlogin files..."
 
-# rootユーザー
+# rootユーザー用 .hushlogin（確実に作成）
 touch /root/.hushlogin
 chmod 644 /root/.hushlogin
+chown root:root /root/.hushlogin
 
-# wsluser
-touch /home/wsluser/.hushlogin
-chown wsluser:wsluser /home/wsluser/.hushlogin
-chmod 644 /home/wsluser/.hushlogin
+# wsluser用 .hushlogin
+if [ -d /home/wsluser ]; then
+    touch /home/wsluser/.hushlogin
+    chown wsluser:wsluser /home/wsluser/.hushlogin
+    chmod 644 /home/wsluser/.hushlogin
+fi
 
-# デフォルトユーザー（WSLが作成する可能性のあるユーザー）
+# デフォルトユーザー用（WSLが作成する可能性のあるユーザー）
 mkdir -p /etc/skel
 touch /etc/skel/.hushlogin
 chmod 644 /etc/skel/.hushlogin
+
+# 追加のユーザーディレクトリがある場合の対応
+for user_dir in /home/*; do
+    if [ -d "$user_dir" ] && [ "$(basename "$user_dir")" != "lost+found" ]; then
+        username=$(basename "$user_dir")
+        if ! [ -f "$user_dir/.hushlogin" ]; then
+            touch "$user_dir/.hushlogin"
+            chown "$username:$username" "$user_dir/.hushlogin" 2>/dev/null || true
+            chmod 644 "$user_dir/.hushlogin"
+        fi
+    fi
+done
+
+# .hushloginの確認と保護
+echo "Protecting .hushlogin files from deletion..."
+chattr +i /root/.hushlogin 2>/dev/null || true
+if [ -f /home/wsluser/.hushlogin ]; then
+    chattr +i /home/wsluser/.hushlogin 2>/dev/null || true
+fi
 
 # Ubuntu特有のメッセージファイルを無効化
 echo "Removing Ubuntu-specific message files..."
@@ -607,6 +641,45 @@ log_file: /dev/null
 EOF
 
 echo "Login message suppression setup completed."
+
+# 最終確認とログ出力
+echo ""
+echo "=== Final Configuration Verification ==="
+echo ""
+
+# DNS設定の確認
+echo "DNS Configuration:"
+echo "  systemd-resolved status:"
+systemctl is-enabled systemd-resolved 2>/dev/null | head -1
+echo "  resolv.conf link:"
+ls -la /etc/resolv.conf 2>/dev/null | head -1
+echo "  systemd-resolved config:"
+ls -la /etc/systemd/resolved.conf.d/ 2>/dev/null | grep -v total | head -3
+
+# MOTD設定の確認
+echo ""
+echo "MOTD Configuration:"
+echo "  .hushlogin files:"
+ls -la /root/.hushlogin 2>/dev/null && echo "    ✓ /root/.hushlogin exists" || echo "    ✗ /root/.hushlogin missing"
+[ -f /home/wsluser/.hushlogin ] && echo "    ✓ /home/wsluser/.hushlogin exists" || echo "    ✗ /home/wsluser/.hushlogin missing"
+ls -la /etc/skel/.hushlogin 2>/dev/null && echo "    ✓ /etc/skel/.hushlogin exists" || echo "    ✗ /etc/skel/.hushlogin missing"
+
+echo "  MOTD scripts executable status:"
+executable_motd_count=$(find /etc/update-motd.d -type f -executable 2>/dev/null | wc -l)
+echo "    Executable MOTD scripts: $executable_motd_count (should be 0)"
+
+echo "  motd-news config:"
+grep "ENABLED=" /etc/default/motd-news 2>/dev/null | head -1 || echo "    motd-news config not found"
+
+# ネットワーク設定の確認
+echo ""
+echo "Network Configuration:"
+echo "  nsswitch.conf hosts line:"
+grep "^hosts:" /etc/nsswitch.conf 2>/dev/null | head -1 || echo "    nsswitch.conf not found"
+
+echo ""
+echo "=== Configuration Setup Complete ==="
+echo ""
 
 '@
 
@@ -1470,10 +1543,37 @@ function New-MinimalBaseImage {
         $exitCode = 0
         try {
             Write-Host "      Running minimization script (this may take several minutes)..." -ForegroundColor Gray
-            wsl -d $tempDistro -u root -- bash -c "$wslScriptPath"
-            $exitCode = $LASTEXITCODE
+            Write-LogOutput "Starting minimization script execution" "INFO"
+            
+            # スクリプトの存在を確認
+            $scriptExists = wsl -d $tempDistro -u root -- test -f $wslScriptPath
+            if ($LASTEXITCODE -ne 0) {
+                Write-ColorOutput Red "Error: Minimization script not found at $wslScriptPath"
+                Write-LogOutput "Script not found at $wslScriptPath" "ERROR"
+                $exitCode = 1
+            } else {
+                Write-Host "      Script found, executing..." -ForegroundColor Gray
+                Write-LogOutput "Executing: bash $wslScriptPath" "INFO"
+                
+                # スクリプトを実行し、出力を表示
+                $scriptOutput = wsl -d $tempDistro -u root -- bash $wslScriptPath 2>&1
+                $exitCode = $LASTEXITCODE
+                
+                if ($DebugMode -or $exitCode -ne 0) {
+                    Write-Host "      Script output:" -ForegroundColor Gray
+                    Write-Host $scriptOutput -ForegroundColor DarkGray
+                }
+                
+                Write-LogOutput "Script completed with exit code: $exitCode" "INFO"
+                if (-not [string]::IsNullOrEmpty($LogFile)) {
+                    Add-Content -Path $LogFile -Value "=== Script Output ===" -Encoding UTF8
+                    Add-Content -Path $LogFile -Value $scriptOutput -Encoding UTF8
+                    Add-Content -Path $LogFile -Value "=== End Script Output ===" -Encoding UTF8
+                }
+            }
         } catch {
             Write-ColorOutput Red "Error during minimization script execution: $_"
+            Write-LogOutput "Exception during script execution: $_" "ERROR"
             $exitCode = 1
         }
         
