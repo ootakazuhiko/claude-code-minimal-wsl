@@ -894,8 +894,8 @@ fi
 # Claude Code インストール
 echo "Installing Claude Code CLI..."
 
-# npm を使用してグローバルにインストール
-npm install -g @anthropic-ai/claude-code || {
+# npm を使用してグローバルにインストール（出力を制御）
+npm install -g @anthropic-ai/claude-code 2>&1 | grep -v "^npm notice" | grep -v "^$" || {
     echo "Error: Claude Code installation failed"
     echo "Please check https://docs.anthropic.com/en/docs/claude-code for installation instructions"
 }
@@ -1680,14 +1680,18 @@ function New-MinimalBaseImage {
                 }
             }
         } catch {
-            Write-ColorOutput Red "Error during minimization script execution: $_"
-            Write-LogOutput "Exception during script execution: $_" "ERROR"
+            # エラーメッセージをクリーンアップ（改行文字や特殊文字を削除）
+            $cleanError = ($_.ToString() -replace '\r?\n', ' ' -replace '\s+', ' ').Trim()
+            Write-Host ""  # 改行を追加して表示を整える
+            Write-ColorOutput Red "Error during minimization script execution: $cleanError"
+            Write-LogOutput "Exception during script execution: $cleanError" "ERROR"
             $exitCode = 1
         }
         
         # スクリプト実行結果確認
         if ($exitCode -ne 0) {
-            Write-ColorOutput Yellow "Warning: Minimization script completed with exit code $exitCode"
+            Write-Host ""  # 改行を追加して表示を整える
+            Write-Host "      Warning: Minimization script completed with exit code $exitCode" -ForegroundColor Yellow
         } else {
             Write-Host "      Minimization script completed successfully" -ForegroundColor Gray
         }
@@ -1715,7 +1719,7 @@ function New-MinimalBaseImage {
 echo "Checking critical files:"
 echo -n "  /etc/resolv.conf: "
 if [ -f /etc/resolv.conf ] || [ -L /etc/resolv.conf ]; then
-    echo "OK ($(ls -la /etc/resolv.conf | awk '{print $9, $10, $11}'))"
+    ls -la /etc/resolv.conf | awk '"'"'{print "OK (" $9, $10, $11 ")"}'"'"'
 else
     echo "MISSING!"
 fi
@@ -1749,16 +1753,33 @@ else
 fi
 '@
         
-        $verifyResult = wsl -d $tempDistro -u root -- bash -c $verifyScript
-        Write-Host $verifyResult -ForegroundColor Gray
-        
-        # 問題が見つかった場合の警告
-        if ($verifyResult -match "MISSING!|INACTIVE|FAILED") {
-            Write-ColorOutput Yellow "      Warning: Some critical components may have issues"
-            Write-LogOutput "Verification found issues: $verifyResult" "WARNING"
+        try {
+            $verifyResult = wsl -d $tempDistro -u root -- bash -c $verifyScript 2>$null
+            if ($verifyResult) {
+                # 各行を個別に表示（インデント付き）
+                $verifyResult -split "`n" | ForEach-Object {
+                    if ($_ -match "MISSING!|INACTIVE|FAILED") {
+                        Write-Host "        $_" -ForegroundColor Yellow
+                    } else {
+                        Write-Host "        $_" -ForegroundColor Gray
+                    }
+                }
+            }
+            
+            # 問題が見つかった場合の警告
+            if ($verifyResult -match "MISSING!|INACTIVE|FAILED") {
+                Write-Host ""
+                Write-Host "      Warning: Some critical components may have issues" -ForegroundColor Yellow
+                Write-LogOutput "Verification found issues: $verifyResult" "WARNING"
+            }
+        } catch {
+            Write-Host "      Could not verify critical files" -ForegroundColor Gray
         }
+        Write-Host ""
         Write-Host "[4/5] Exporting minimal image..." -ForegroundColor White
+        Write-Host "      This may take several minutes..." -ForegroundColor Gray
         wsl --terminate $tempDistro
+        Start-Sleep -Seconds 2  # ターミネート後の安定化のため待機
         wsl --export $tempDistro $BaseImagePath
         
         # サイズ確認と結果表示
