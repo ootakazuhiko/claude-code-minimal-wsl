@@ -98,6 +98,89 @@ wsl --terminate Ubuntu-Minimal-<name>
 wsl --unregister Ubuntu-Minimal-<name>
 ```
 
+## Authentication & Credentials Setup
+
+### Included Developer Tools Authentication
+
+When creating instances with developer tools, you'll need to configure authentication for:
+
+#### 1. Claude Code
+```bash
+# Option A: Environment variable (recommended)
+export ANTHROPIC_API_KEY='your-api-key'
+echo 'export ANTHROPIC_API_KEY="your-api-key"' >> ~/.bashrc
+
+# Option B: Claude CLI config
+claude auth login
+
+# Option C: Config file
+# Edit ~/.config/claude/config.yaml
+
+# Verify setup
+claude --version
+echo "Hello!" | claude
+```
+
+#### 2. GitHub CLI (gh)
+```bash
+# Interactive authentication
+gh auth login
+
+# Choose authentication method:
+# - GitHub.com
+# - HTTPS protocol
+# - Authenticate with browser or token
+
+# Verify authentication
+gh auth status
+```
+
+#### 3. Git Configuration
+```bash
+# Set up global git config
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+
+# For Windows credentials integration
+git config --global credential.helper "/mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe"
+```
+
+### Authentication Helper Script
+
+A comprehensive authentication setup script is available:
+
+```powershell
+# Run the authentication setup helper
+.\scripts\setup\Setup-DevTools.ps1
+
+# This script will:
+# - Configure git with your credentials
+# - Set up GitHub CLI authentication
+# - Configure Claude Code API key
+# - Set up Windows credential integration
+# - Create persistent configurations
+```
+
+### Secure Credential Storage
+
+- **API Keys**: Stored in user's home directory with restricted permissions
+- **GitHub Tokens**: Managed by gh CLI in secure config
+- **Git Credentials**: Integrated with Windows Credential Manager
+- **SSH Keys**: Can be shared from Windows (see below)
+
+### Using Windows SSH Keys in WSL
+
+```bash
+# Option 1: Copy Windows SSH keys
+cp -r /mnt/c/Users/$USER/.ssh ~/.ssh
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_*
+chmod 644 ~/.ssh/*.pub
+
+# Option 2: Symlink to Windows SSH directory
+ln -s /mnt/c/Users/$USER/.ssh ~/.ssh
+```
+
 ## Claude Project Identifier Integration
 
 Automatically installed with Claude Code option:
@@ -170,10 +253,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Acti
 
 ```powershell
 # Check WSL environment
-.\Check-WSLDistributions.ps1
+.\scripts\debug\Check-WSLRequirements.ps1
 
-# Debug script generation
-.\Debug-ScriptGeneration.ps1
+# Check PowerShell environment
+.\scripts\debug\Check-Environment.ps1
+
+# Debug WSL issues
+.\scripts\debug\Debug-WSLIssues.ps1
 ```
 
 ## File Structure
@@ -181,10 +267,34 @@ powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Acti
 ```
 ClaudeCode_WSL_Ubuntu_Image_Setup/
 ├── Create-MinimalUbuntuWSL.ps1      # Main creation script
-├── Check-WSLDistributions.ps1       # Diagnostic tool
-├── Debug-ScriptGeneration.ps1       # Debug tool
+├── README.md                        # This file
 ├── CLAUDE.md                        # Claude Code instructions
-└── README.md                        # This file
+├── LICENSE                          # License file
+├── scripts/                         # Utility and helper scripts
+│   ├── debug/                       # Debugging and diagnostic tools
+│   │   ├── Check-Environment.ps1
+│   │   ├── Check-WSLRequirements.ps1
+│   │   ├── Debug-WSLIssues.ps1
+│   │   ├── Fix-WSLIssues.ps1
+│   │   └── Manual-Fix.ps1
+│   ├── setup/                       # Setup and installation scripts
+│   │   ├── Setup-AllDevTools.ps1
+│   │   ├── Setup-DevTools.ps1
+│   │   └── claude-code-installer.sh
+│   └── utility/                     # Utility scripts
+│       ├── Apply-ClaudeTheme.ps1
+│       ├── Clean-DuplicateProfiles.ps1
+│       └── Test-MinimalWSL.ps1
+├── docs/                            # Documentation
+│   ├── CONTRIBUTING.md
+│   ├── INSTALL-WSL.md
+│   ├── ISSUES.md
+│   ├── TROUBLESHOOTING.md
+│   ├── USAGE.md
+│   └── minimal-ubuntu-readme.md
+└── examples/                        # Examples and templates
+    ├── devtools-config.example.json
+    └── example-usage.md
 ```
 
 ## License
@@ -282,6 +392,89 @@ wsl --terminate Ubuntu-Minimal-<名前>
 wsl --unregister Ubuntu-Minimal-<名前>
 ```
 
+## 認証・資格情報の設定
+
+### 含まれる開発ツールの認証設定
+
+開発ツール付きでインスタンスを作成した場合、以下の認証設定が必要です：
+
+#### 1. Claude Code
+```bash
+# オプションA: 環境変数（推奨）
+export ANTHROPIC_API_KEY='your-api-key'
+echo 'export ANTHROPIC_API_KEY="your-api-key"' >> ~/.bashrc
+
+# オプションB: Claude CLI設定
+claude auth login
+
+# オプションC: 設定ファイル
+# ~/.config/claude/config.yaml を編集
+
+# 設定の確認
+claude --version
+echo "こんにちは！" | claude
+```
+
+#### 2. GitHub CLI (gh)
+```bash
+# 対話型認証
+gh auth login
+
+# 認証方法を選択：
+# - GitHub.com
+# - HTTPSプロトコル
+# - ブラウザまたはトークンで認証
+
+# 認証状態の確認
+gh auth status
+```
+
+#### 3. Git設定
+```bash
+# グローバルgit設定
+git config --global user.name "あなたの名前"
+git config --global user.email "your.email@example.com"
+
+# Windows資格情報統合
+git config --global credential.helper "/mnt/c/Program\\ Files/Git/mingw64/bin/git-credential-manager.exe"
+```
+
+### 認証ヘルパースクリプト
+
+包括的な認証設定スクリプトが利用可能です：
+
+```powershell
+# 認証設定ヘルパーを実行
+.\scripts\setup\Setup-DevTools.ps1
+
+# このスクリプトは以下を実行します：
+# - gitに資格情報を設定
+# - GitHub CLI認証を設定
+# - Claude Code APIキーを設定
+# - Windows資格情報統合を設定
+# - 永続的な設定を作成
+```
+
+### 安全な資格情報の保存
+
+- **APIキー**: ユーザーのホームディレクトリに制限付き権限で保存
+- **GitHubトークン**: gh CLIが安全な設定で管理
+- **Git資格情報**: Windows資格情報マネージャーと統合
+- **SSHキー**: Windowsから共有可能（以下参照）
+
+### WindowsのSSHキーをWSLで使用
+
+```bash
+# オプション1: WindowsのSSHキーをコピー
+cp -r /mnt/c/Users/$USER/.ssh ~/.ssh
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_*
+chmod 644 ~/.ssh/*.pub
+
+# オプション2: WindowsのSSHディレクトリへのシンボリックリンク
+ln -s /mnt/c/Users/$USER/.ssh ~/.ssh
+```
+
 ## Claude Project Identifier統合
 
 Claude Codeオプションで自動インストール：
@@ -354,10 +547,13 @@ powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Acti
 
 ```powershell
 # WSL環境を確認
-.\Check-WSLDistributions.ps1
+.\scripts\debug\Check-WSLRequirements.ps1
 
-# スクリプト生成をデバッグ
-.\Debug-ScriptGeneration.ps1
+# PowerShell環境を確認
+.\scripts\debug\Check-Environment.ps1
+
+# WSL問題をデバッグ
+.\scripts\debug\Debug-WSLIssues.ps1
 ```
 
 ## ファイル構造
@@ -365,10 +561,34 @@ powershell.exe -ExecutionPolicy Bypass -File .\Create-MinimalUbuntuWSL.ps1 -Acti
 ```
 ClaudeCode_WSL_Ubuntu_Image_Setup/
 ├── Create-MinimalUbuntuWSL.ps1      # メイン作成スクリプト
-├── Check-WSLDistributions.ps1       # 診断ツール
-├── Debug-ScriptGeneration.ps1       # デバッグツール
+├── README.md                        # このファイル
 ├── CLAUDE.md                        # Claude Code指示書
-└── README.md                        # このファイル
+├── LICENSE                          # ライセンスファイル
+├── scripts/                         # ユーティリティとヘルパースクリプト
+│   ├── debug/                       # デバッグと診断ツール
+│   │   ├── Check-Environment.ps1
+│   │   ├── Check-WSLRequirements.ps1
+│   │   ├── Debug-WSLIssues.ps1
+│   │   ├── Fix-WSLIssues.ps1
+│   │   └── Manual-Fix.ps1
+│   ├── setup/                       # セットアップとインストールスクリプト
+│   │   ├── Setup-AllDevTools.ps1
+│   │   ├── Setup-DevTools.ps1
+│   │   └── claude-code-installer.sh
+│   └── utility/                     # ユーティリティスクリプト
+│       ├── Apply-ClaudeTheme.ps1
+│       ├── Clean-DuplicateProfiles.ps1
+│       └── Test-MinimalWSL.ps1
+├── docs/                            # ドキュメント
+│   ├── CONTRIBUTING.md
+│   ├── INSTALL-WSL.md
+│   ├── ISSUES.md
+│   ├── TROUBLESHOOTING.md
+│   ├── USAGE.md
+│   └── minimal-ubuntu-readme.md
+└── examples/                        # 例とテンプレート
+    ├── devtools-config.example.json
+    └── example-usage.md
 ```
 
 ## ライセンス

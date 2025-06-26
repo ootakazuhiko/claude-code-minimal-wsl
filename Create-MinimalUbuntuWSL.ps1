@@ -187,7 +187,7 @@ echo "Running as user: $(whoami)"
 echo "Working directory: $(pwd)"
 echo ""
 
-# エラーハンドラの改善
+# Error handler improvement
 error_handler() {
     local exit_code=$?
     local line_no=${1:-$LINENO}
@@ -197,26 +197,26 @@ error_handler() {
     return 0
 }
 
-# トラップを設定（ただし、スクリプト全体は停止しない）
+# Set up error trap (but don't stop the entire script)
 trap 'error_handler $LINENO' ERR
 
-# デバッグ情報の表示
+# Display debug information
 debug_info() {
     echo "DEBUG: $1"
 }
 
 debug_info "Error handler and trap configured"
 
-# 環境変数設定
+# Environment variables
 export DEBIAN_FRONTEND=noninteractive
 export DEBCONF_NONINTERACTIVE_SEEN=true
 
-# 1. 基本アップデート
+# 1. Basic update
 echo "[1/8] System update..."
 apt-get update 2>&1 | tail -n 20 || error_handler
 apt-get upgrade -y 2>&1 | tail -n 20 || error_handler
 
-# 2. 必要最小限のパッケージをインストール
+# 2. Install essential packages
 echo "[2/8] Installing essential packages..."
 apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -231,29 +231,29 @@ apt-get install -y --no-install-recommends \
     dbus \
     vim-tiny 2>&1 | tail -n 20 || error_handler
 
-# ロケール設定
+# Locale settings
 locale-gen en_US.UTF-8
 update-locale LANG=en_US.UTF-8
 
-# 3. 不要なパッケージを削除
+# 3. Remove unnecessary packages
 echo "[3/8] Removing unnecessary packages..."
 REMOVE_PACKAGES=(
-    # Snap関連
+    # Snap related
     snapd
     
-    # Cloud関連
+    # Cloud related
     cloud-init
     cloud-guest-utils
     cloud-initramfs-copymods
     cloud-initramfs-dyn-netconf
     
-    # 自動更新
+    # Auto updates
     unattended-upgrades
     update-manager-core
     ubuntu-release-upgrader-core
     update-notifier-common
     
-    # 不要なシステムサービス
+    # Unnecessary system services
     accountsservice
     bolt
     modemmanager
@@ -271,7 +271,7 @@ REMOVE_PACKAGES=(
     plymouth
     plymouth-theme-ubuntu-text
     
-    # その他の不要なもの
+    # Other unnecessary packages
     landscape-common
     ubuntu-advantage-tools
     xdg-user-dirs
@@ -283,18 +283,18 @@ REMOVE_PACKAGES=(
     open-iscsi
     lxd-agent-loader
     
-    # ドキュメント関連
+    # Documentation related
     man-db
     manpages
     manpages-dev
     info
     install-info
     
-    # 開発ツール（最小構成では不要）
+    # Development tools (not needed in minimal setup)
     build-essential
     python3-pip
     
-    # その他
+    # Others
     nano
     ed
     lshw
@@ -310,7 +310,7 @@ for package in "${REMOVE_PACKAGES[@]}"; do
     apt-get remove -y --purge $package 2>/dev/null || true
 done
 
-# 重要なパッケージが誤って削除されていないか確認・再インストール
+# Ensure essential packages are installed
 echo "Ensuring essential packages are installed..."
 ESSENTIAL_PACKAGES=(
     dpkg
@@ -332,7 +332,7 @@ ESSENTIAL_PACKAGES=(
     sysvinit-utils
     tar
     util-linux
-    # DNS解決に必要なパッケージ
+    # Packages required for DNS resolution
     systemd-resolved
     libnss-resolve
     bind9-dnsutils
@@ -348,23 +348,23 @@ for package in "${ESSENTIAL_PACKAGES[@]}"; do
     fi
 done
 
-# 4. 依存関係のクリーンアップ
+# 4. Clean up dependencies
 echo "[4/8] Cleaning up dependencies..."
 apt-get autoremove -y --purge >/dev/null 2>&1
 
-# 5. ドキュメントとキャッシュの削除
+# 5. Remove documentation and caches
 echo "[5/8] Removing documentation and caches..."
 
-# ドキュメント削除
+# Remove documentation
 rm -rf /usr/share/doc/*
 rm -rf /usr/share/man/*
 rm -rf /usr/share/info/*
 rm -rf /usr/share/lintian/*
 
-# 不要なロケール削除
+# Remove unnecessary locales
 find /usr/share/locale -mindepth 1 -maxdepth 1 ! -name 'en*' -exec rm -rf {} +
 
-# キャッシュクリア
+# Clear caches
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 rm -rf /var/cache/apt/archives/*
@@ -372,13 +372,13 @@ rm -rf /var/cache/debconf/*
 rm -rf /tmp/*
 rm -rf /var/tmp/*
 
-# ログクリア
+# Clear logs
 find /var/log -type f -exec truncate -s 0 {} \;
 
-# 6. システム設定の最適化
+# 6. Optimize system settings
 echo "[6/8] Optimizing system configuration..."
 
-# WSL設定 - systemd-resolved とWSLの協調動作を設定
+# WSL configuration - set up coordination between systemd-resolved and WSL
 cat > /etc/wsl.conf << 'EOF'
 [boot]
 systemd=true
@@ -396,7 +396,7 @@ enabled=true
 appendWindowsPath=true
 EOF
 
-# systemd-resolved設定を最適化
+# Optimize systemd-resolved configuration
 mkdir -p /etc/systemd/resolved.conf.d/
 cat > /etc/systemd/resolved.conf.d/wsl.conf << 'EOF'
 [Resolve]
@@ -407,12 +407,12 @@ Cache=yes
 DNSStubListener=yes
 EOF
 
-# systemd-resolved を有効化し起動
+# Enable and start systemd-resolved
 systemctl unmask systemd-resolved 2>/dev/null || true
 systemctl enable systemd-resolved 2>/dev/null || true
 
-# 不要なサービスの無効化
-# systemd-resolved は DNS解決に必要なので無効化しない
+# Disable unnecessary services
+# Do not disable systemd-resolved as it's needed for DNS resolution
 DISABLE_SERVICES=(
     accounts-daemon
     cron
@@ -428,11 +428,11 @@ for service in "${DISABLE_SERVICES[@]}"; do
     systemctl mask $service 2>/dev/null || true
 done
 
-# systemd-resolved が確実に有効であることを再確認
+# Double-check that systemd-resolved is enabled
 systemctl unmask systemd-resolved 2>/dev/null || true
 systemctl enable systemd-resolved 2>/dev/null || true
 
-# journald設定（ログサイズ制限）
+# journald configuration (log size limits)
 mkdir -p /etc/systemd/journald.conf.d/
 cat > /etc/systemd/journald.conf.d/00-wsl.conf << 'EOF'
 [Journal]
@@ -441,7 +441,7 @@ RuntimeMaxUse=10M
 ForwardToSyslog=no
 EOF
 
-# apt設定（推奨パッケージ無効化）
+# apt configuration (disable recommended packages)
 cat > /etc/apt/apt.conf.d/99-no-recommends << 'EOF'
 APT::Install-Recommends "false";
 APT::Install-Suggests "false";
@@ -449,75 +449,75 @@ APT::AutoRemove::RecommendsImportant "false";
 APT::AutoRemove::SuggestsImportant "false";
 EOF
 
-# 不要なcronジョブ削除
+# Remove unnecessary cron jobs
 rm -f /etc/cron.daily/*
 rm -f /etc/cron.weekly/*
 rm -f /etc/cron.monthly/*
 
-# MOTD完全無効化 - より確実なアプローチ
+# Complete MOTD disabling - more reliable approach
 echo "Completely disabling MOTD and login messages..."
 
-# update-motd.d のスクリプトを無効化（削除ではなく実行権限を剥奪）
+# Disable update-motd.d scripts (remove execute permission instead of deleting)
 if [ -d /etc/update-motd.d ]; then
     chmod -x /etc/update-motd.d/* 2>/dev/null || true
-    # 特に問題のあるスクリプトを個別に無効化
+    # Specifically disable problematic scripts
     chmod -x /etc/update-motd.d/10-help-text 2>/dev/null || true
     chmod -x /etc/update-motd.d/50-motd-news 2>/dev/null || true
     chmod -x /etc/update-motd.d/91-* 2>/dev/null || true
     chmod -x /etc/update-motd.d/99-* 2>/dev/null || true
 fi
 
-# MOTDファイルを空にする
+# Empty MOTD files
 echo "" > /etc/motd
 echo "" > /etc/issue
 echo "" > /etc/issue.net
 
-# ランタイムのMOTDファイルも無効化
+# Disable runtime MOTD files
 rm -f /run/motd.dynamic 2>/dev/null || true
 mkdir -p /run
 touch /run/motd.dynamic
 chmod 444 /run/motd.dynamic
 
-# Ubuntu Pro と landscape 関連の完全削除
+# Complete removal of Ubuntu Pro and landscape
 echo "Removing Ubuntu Pro and landscape messages..."
-# ESMメッセージファイル削除
+# Remove ESM message files
 rm -f /etc/apt/apt.conf.d/20apt-esm
 rm -f /etc/apt/apt.conf.d/99esm
 
-# landscape関連ファイル削除
+# Remove landscape related files
 rm -rf /etc/landscape
 rm -rf /var/lib/landscape
 
-# Ubuntu advantage tools 無効化
+# Disable Ubuntu advantage tools
 if [ -f /etc/ubuntu-advantage/uaclient.conf ]; then
     rm -f /etc/ubuntu-advantage/uaclient.conf
 fi
 
-# systemd の motd 関連サービス完全無効化
+# Completely disable systemd motd services
 echo "Disabling systemd MOTD services..."
 systemctl disable motd-news.service 2>/dev/null || true
 systemctl mask motd-news.service 2>/dev/null || true
 systemctl disable motd-news.timer 2>/dev/null || true
 systemctl mask motd-news.timer 2>/dev/null || true
 
-# apport (エラーレポート) も無効化
+# Also disable apport (error reporting)
 systemctl disable apport.service 2>/dev/null || true
 systemctl mask apport.service 2>/dev/null || true
 
-# Ubuntu telemetry 無効化
+# Disable Ubuntu telemetry
 if [ -f /etc/default/ubuntu-esm ]; then
     rm -f /etc/default/ubuntu-esm
 fi
 
-# 7. WSL起動時の問題を修正するための設定
+# 7. Settings to fix WSL startup issues
 echo "[7/8] Setting up WSL startup fixes..."
 
-# systemd-resolved が正しく動作するようにnsswitchを設定
+# Configure nsswitch for systemd-resolved to work properly
 if [ -f /etc/nsswitch.conf ]; then
-    # hostsラインを修正してsystemd-resolved経由で名前解決するように設定
+    # Fix hosts line to configure name resolution via systemd-resolved
     sed -i 's/^hosts:.*/hosts: files resolve [!UNAVAIL=return] dns myhostname/' /etc/nsswitch.conf
 else
-    # nsswitch.confを作成
+    # Create nsswitch.conf
     cat > /etc/nsswitch.conf << 'NSSEOF'
 passwd:         files
 group:          files
@@ -536,22 +536,22 @@ netgroup:       nis
 NSSEOF
 fi
 
-# /etc/resolv.confのリンクを正しく設定（systemd-resolved用）
+# Properly configure /etc/resolv.conf link (for systemd-resolved)
 rm -f /etc/resolv.conf
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 
-# 8. ユーザー設定
+# 8. User configuration
 echo "[8/8] Setting up user..."
 useradd -m -s /bin/bash -G sudo wsluser 2>/dev/null || true
 echo "wsluser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# ログインメッセージを完全に無効化 - 包括的アプローチ
+# Completely disable login messages - comprehensive approach
 echo "Setting up complete login message suppression..."
 
-# Claude環境専用のプロンプト設定（ティール系）
+# Claude environment specific prompt configuration (teal theme)
 echo "Setting up Claude-specific teal prompt..."
 
-# プロンプト設定を.bashrcに追加する関数
+# Function to add prompt settings to .bashrc
 setup_claude_prompt() {
     local target_file="$1"
     
@@ -586,18 +586,18 @@ cd() {
 CLAUDE_PROMPT
 }
 
-# /etc/skel/.bashrcに追加（新規ユーザー用）
+# Add to /etc/skel/.bashrc (for new users)
 setup_claude_prompt "/etc/skel/.bashrc"
 
-# rootユーザーの.bashrcに追加
+# Add to root user's .bashrc
 setup_claude_prompt "/root/.bashrc"
 
-# wsluserの.bashrcに追加
+# Add to wsluser's .bashrc
 if [ -f /home/wsluser/.bashrc ]; then
     setup_claude_prompt "/home/wsluser/.bashrc"
 fi
 
-# 他の既存ユーザーにも適用
+# Apply to other existing users
 for user_home in /home/*; do
     if [ -d "$user_home" ] && [ -f "$user_home/.bashrc" ] && [ "$(basename "$user_home")" != "lost+found" ]; then
         setup_claude_prompt "$user_home/.bashrc"
@@ -606,27 +606,27 @@ done
 
 echo "Claude teal prompt setup completed."
 
-# すべてのユーザーに対して .hushlogin を設定
+# Set .hushlogin for all users
 echo "Creating .hushlogin files..."
 
-# rootユーザー用 .hushlogin（確実に作成）
+# Create .hushlogin for root user (ensure creation)
 touch /root/.hushlogin
 chmod 644 /root/.hushlogin
 chown root:root /root/.hushlogin
 
-# wsluser用 .hushlogin
+# .hushlogin for wsluser
 if [ -d /home/wsluser ]; then
     touch /home/wsluser/.hushlogin
     chown wsluser:wsluser /home/wsluser/.hushlogin
     chmod 644 /home/wsluser/.hushlogin
 fi
 
-# デフォルトユーザー用（WSLが作成する可能性のあるユーザー）
+# For default user (users that WSL might create)
 mkdir -p /etc/skel
 touch /etc/skel/.hushlogin
 chmod 644 /etc/skel/.hushlogin
 
-# 追加のユーザーディレクトリがある場合の対応
+# Handle additional user directories if they exist
 for user_dir in /home/*; do
     if [ -d "$user_dir" ] && [ "$(basename "$user_dir")" != "lost+found" ]; then
         username=$(basename "$user_dir")
@@ -638,62 +638,62 @@ for user_dir in /home/*; do
     fi
 done
 
-# .hushloginの確認と保護
+# Confirm and protect .hushlogin files
 echo "Protecting .hushlogin files from deletion..."
 chattr +i /root/.hushlogin 2>/dev/null || true
 if [ -f /home/wsluser/.hushlogin ]; then
     chattr +i /home/wsluser/.hushlogin 2>/dev/null || true
 fi
 
-# Ubuntu特有のメッセージファイルを無効化
+# Disable Ubuntu-specific message files
 echo "Removing Ubuntu-specific message files..."
 if [ -f /etc/legal ]; then
     echo "" > /etc/legal
 fi
 
-# landscape-common の完全削除（メッセージの主要原因）
+# Complete removal of landscape-common (main cause of messages)
 apt-get remove -y --purge landscape-common landscape-client 2>/dev/null || true
 
-# PAM設定でMOTD表示を完全に無効化
+# Completely disable MOTD display in PAM settings
 echo "Disabling PAM MOTD modules..."
-# pam_motd を完全にコメントアウト
+# Completely comment out pam_motd
 sed -i 's/^session.*pam_motd\.so.*/#&/' /etc/pam.d/login 2>/dev/null || true
 sed -i 's/^session.*pam_motd\.so.*/#&/' /etc/pam.d/sshd 2>/dev/null || true
 
-# Ubuntu 固有のログインメッセージ設定を無効化
+# Disable Ubuntu-specific login message settings
 echo "Disabling Ubuntu login message configurations..."
 
-# motd-news 設定を無効化
+# Disable motd-news settings
 mkdir -p /etc/default
 cat > /etc/default/motd-news << 'EOF'
 ENABLED=0
 EOF
 
-# cloudflare DOH も無効化
+# Also disable Cloudflare DOH
 if [ -f /etc/systemd/resolved.conf ]; then
     sed -i 's/^#*DNS=.*/DNS=8.8.8.8/' /etc/systemd/resolved.conf
 fi
 
-# Pro messages を生成するプロセスを無効化
+# Disable process that generates Pro messages
 if [ -f /usr/bin/ubuntu-advantage ]; then
     chmod -x /usr/bin/ubuntu-advantage 2>/dev/null || true
 fi
 
-# HWE update notifier 無効化
+# Disable HWE update notifier
 if [ -f /usr/bin/update-notifier ]; then
     chmod -x /usr/bin/update-notifier 2>/dev/null || true
 fi
 
-# landscape-sysinfo 無効化
+# Disable landscape-sysinfo
 if [ -f /usr/bin/landscape-sysinfo ]; then
     chmod -x /usr/bin/landscape-sysinfo 2>/dev/null || true
 fi
 
-# /etc/issue と /etc/issue.net を空にする
+# Empty /etc/issue and /etc/issue.net
 echo "" > /etc/issue
 echo "" > /etc/issue.net
 
-# Ubuntu Pro 広告を完全に無効化
+# Completely disable Ubuntu Pro advertisements
 mkdir -p /etc/ubuntu-advantage
 cat > /etc/ubuntu-advantage/uaclient.conf << 'EOF'
 contract_url: https://contracts.canonical.com
@@ -705,12 +705,12 @@ EOF
 
 echo "Login message suppression setup completed."
 
-# 最終確認とログ出力
+# Final verification and log output
 echo ""
 echo "=== Final Configuration Verification ==="
 echo ""
 
-# DNS設定の確認
+# DNS configuration check
 echo "DNS Configuration:"
 echo "  systemd-resolved status:"
 systemctl is-enabled systemd-resolved 2>/dev/null | head -1
@@ -719,7 +719,7 @@ ls -la /etc/resolv.conf 2>/dev/null | head -1
 echo "  systemd-resolved config:"
 ls -la /etc/systemd/resolved.conf.d/ 2>/dev/null | grep -v total | head -3
 
-# MOTD設定の確認
+# MOTD configuration check
 echo ""
 echo "MOTD Configuration:"
 echo "  .hushlogin files:"
@@ -734,7 +734,7 @@ echo "    Executable MOTD scripts: $executable_motd_count (should be 0)"
 echo "  motd-news config:"
 grep "ENABLED=" /etc/default/motd-news 2>/dev/null | head -1 || echo "    motd-news config not found"
 
-# ネットワーク設定の確認
+# Network configuration check
 echo ""
 echo "Network Configuration:"
 echo "  nsswitch.conf hosts line:"
@@ -746,33 +746,34 @@ echo ""
 
 '@
 
-    # オプショナルツールのカウンター
+    # Optional tools counter
     $stepNum = 8
     
-    # GitHub CLI インストール
+    # GitHub CLI installation
     if ($WithGitHubCLI) {
+        $stepNum++
         $script += @'
 
-# $stepNum. GitHub CLI インストール
-echo "[$stepNum/X] Installing GitHub CLI..."
+# 9. GitHub CLI インストール
+echo "[9/X] Installing GitHub CLI..."
 
-# GitHub CLI GPGキー追加
+# Add GitHub CLI GPG key
 echo "  Downloading GitHub CLI GPG key..."
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /tmp/githubcli.gpg || {
     echo "  ERROR: Failed to download GitHub CLI GPG key"
-    return 1
+    exit 1
 }
 dd if=/tmp/githubcli.gpg of=/usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null 2>&1
 rm -f /tmp/githubcli.gpg
 
-# リポジトリ追加
+# Add repository
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
 
-# インストール
+# Install
 apt-get update >/dev/null 2>&1
 apt-get install -y --no-install-recommends gh >/dev/null 2>&1
 
-# クリーンアップ
+# Cleanup
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
@@ -780,7 +781,7 @@ rm -rf /var/lib/apt/lists/*
         $stepNum++
     }
     
-    # Claude Code インストール
+    # Claude Code installation
     if ($WithClaudeCode) {
 
         $script += @'
@@ -788,57 +789,57 @@ rm -rf /var/lib/apt/lists/*
 # 9. Claude Code インストール
 echo "[9/X] Installing Claude Code..."
 
-# Claude Code の前提条件
+# Claude Code prerequisites
 echo "Installing Node.js for Claude Code..."
 echo "  Downloading Node.js setup script..."
-# Node.js 20.x をインストール
+# Install Node.js 20.x
 curl -fsSL https://deb.nodesource.com/setup_20.x -o /tmp/nodesource_setup.sh || {
     echo "  ERROR: Failed to download Node.js setup script"
-    return 1
+    exit 1
 }
 bash /tmp/nodesource_setup.sh >/dev/null 2>&1
 rm -f /tmp/nodesource_setup.sh
 apt-get install -y nodejs >/dev/null 2>&1
 
-# npmが正しくインストールされたか確認
+# Verify npm installation
 if ! command -v npm >/dev/null 2>&1; then
     echo "Error: npm installation failed"
-    return 1
+    exit 1
 fi
 
-# Claude Code インストール
+# Claude Code installation
 echo "Installing Claude Code CLI..."
 
-# npm を使用してグローバルにインストール（出力を制御）
+# Install globally using npm (control output)
 npm install -g @anthropic-ai/claude-code 2>&1 | grep -v "^npm notice" | grep -v "^$" || {
     echo "Error: Claude Code installation failed"
     echo "Please check https://docs.anthropic.com/en/docs/claude-code for installation instructions"
 }
 
-# シンボリックリンクを作成（claude-codeがclaudeとしても使えるように）
+# Create symlink (so claude-code can also be used as claude)
 claude_path=$(command -v claude-code 2>/dev/null || command -v claude 2>/dev/null)
 if [ -n "$claude_path" ]; then
     if [ ! -e /usr/bin/claude ]; then
         ln -sf "$claude_path" /usr/bin/claude 2>/dev/null || true
     fi
     echo "Claude Code installed at: $claude_path"
-    # バージョン確認
+    # Version check
     claude --version 2>/dev/null || claude-code --version 2>/dev/null || echo "Warning: Could not verify Claude Code version"
 else
     echo "Warning: Claude Code binary not found in PATH"
 fi
 
-# Claude Project Identifier インストール
+# Install Claude Project Identifier
 echo "Installing Claude Project Identifier..."
 
-# インストール前にgitが利用可能か確認
+# Check if git is available before installation
 if ! command -v git >/dev/null 2>&1; then
     echo "  ERROR: git is not available for Claude Project Identifier installation"
     echo "  Skipping Claude Project Identifier installation..."
 else
     echo "  Downloading installation script..."
     
-    # より詳細なエラー出力でインストールスクリプトを実行
+    # Run installation script with more detailed error output
     su - wsluser -c "
         export DEBIAN_FRONTEND=noninteractive
         curl -fsSL https://raw.githubusercontent.com/ootakazuhiko/claude-project-identifier/main/scripts/install.sh 2>/dev/null | bash -s 2>&1
@@ -985,7 +986,7 @@ echo 'echo ""' >> /opt/claude-code/setup-claude-code.sh
 chmod +x /opt/claude-code/setup-claude-code.sh
 chown wsluser:wsluser /opt/claude-code/setup-claude-code.sh
 
-# クリーンアップ
+# Cleanup
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
@@ -998,10 +999,11 @@ echo "Run '/opt/claude-code/setup-claude-code.sh' for setup instructions."
 
     # Podman インストール
     if ($WithPodman) {
+        $stepNum++
         $script += @'
 
-# $stepNum. Podman インストール
-echo "[$stepNum/X] Installing Podman..."
+# 10. Podman インストール
+echo "[10/X] Installing Podman..."
 
 # Podman前提パッケージ
 apt-get install -y --no-install-recommends \
@@ -1016,7 +1018,7 @@ echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers
 echo "  Downloading Podman GPG key..."
 curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_\${VERSION_ID}/Release.key" -o /tmp/podman.key || {
     echo "  ERROR: Failed to download Podman GPG key"
-    return 1
+    exit 1
 }
 apt-key add /tmp/podman.key >/dev/null 2>&1
 rm -f /tmp/podman.key
@@ -1144,10 +1146,10 @@ sleep 3
 # stub-resolv.conf が存在するか確認してリンク
 if [ -f /run/systemd/resolve/stub-resolv.conf ]; then
     ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
-    echo "✓ Successfully linked resolv.conf to systemd-resolved"
+    echo "[OK] Successfully linked resolv.conf to systemd-resolved"
 else
     # フォールバック: 手動で作成
-    echo "⚠ stub-resolv.conf not found, creating manual resolv.conf"
+    echo "[WARNING] stub-resolv.conf not found, creating manual resolv.conf"
     cat > /etc/resolv.conf << 'RESOLVEOF'
 nameserver 127.0.0.53
 options edns0 trust-ad
@@ -1171,9 +1173,9 @@ dns_working=false
 
 # systemd-resolved の状態確認
 if systemctl is-active systemd-resolved >/dev/null 2>&1; then
-    echo "✓ systemd-resolved is active"
+    echo "[OK] systemd-resolved is active"
 else
-    echo "⚠ systemd-resolved is not active"
+    echo "[WARNING] systemd-resolved is not active"
 fi
 
 # 複数の方法でDNS解決をテスト
@@ -1298,12 +1300,12 @@ echo "Final DNS resolution test..."
 if getent hosts google.com >/dev/null 2>&1; then
     echo "[OK] DNS resolution confirmed working"
 else
-    echo "⚠ DNS resolution still has issues"
+    echo "[WARNING] DNS resolution still has issues"
     echo "Current resolv.conf:"
     cat /etc/resolv.conf
 fi
 
-# インストールされたツールの確認
+# Installされたツールの確認
 echo ""
 echo "=== Installed Tools Verification ==="
 if command -v podman >/dev/null 2>&1; then
@@ -1435,7 +1437,7 @@ function New-MinimalBaseImage {
                     if ($installProcess.ExitCode -eq 0) {
                         Write-Host "      Installation command executed successfully" -ForegroundColor Gray
                         
-                        # インストール完了待機
+                        # Install完了待機
                         $timeout = 180  # 3分
                         $elapsed = 0
                         $installSuccess = $false
@@ -1446,7 +1448,7 @@ function New-MinimalBaseImage {
                             Start-Sleep -Seconds 5
                             $elapsed += 5
                             
-                            # インストール済みディストリビューションを確認
+                            # Install済みディストリビューションを確認
                             $currentDistros = wsl --list --quiet 2>$null | ForEach-Object { 
                                 $_.Trim() -replace '\0', '' -replace '[^\x20-\x7E]', ''
                             } | Where-Object { $_ -ne '' }
@@ -1502,7 +1504,7 @@ function New-MinimalBaseImage {
                             }
                         }
                     } else {
-                        # インストールが失敗した場合、他のUbuntuバージョンを探す
+                        # Installが失敗した場合、他のUbuntuバージョンを探す
                         Write-ColorOutput Yellow "Ubuntu-22.04 installation failed (exit code: $($installProcess.ExitCode))"
                         
                         # 利用可能な他のUbuntuバージョンを確認
@@ -1864,7 +1866,7 @@ fi
         }
         
     } finally {
-        # クリーンアップ（エラーハンドリング付き）
+        # Cleanup（エラーハンドリング付き）
         if (-not $KeepTempInstance) {
             Write-Host ""
             Write-Host "Cleaning up temporary instance..." -ForegroundColor Gray
